@@ -149,14 +149,23 @@ export default function Home() {
             {categories.map(([name, icon]) => <button key={name} className={category === name ? "selected" : ""} onClick={() => setCategory(name)}><i>{icon}</i>{name}</button>)}
           </div>
           <div className="map-directory">
-            <div className="map">
-              <div className="road r1" /><div className="road r2" /><div className="road r3" />
-              <span className="map-label l1">NORTHERN CAMPUS</span><span className="map-label l2">SCIENCE ROAD</span><span className="map-label l3">SHUTTLE ROUTE</span>
-              <div className="field f1" /><div className="field f2" />
-              {filtered.map((place) => <button aria-label={place.name} key={place.id} className={`marker ${selected?.id === place.id ? "current" : ""}`} style={{ left: `${place.x}%`, top: `${place.y}%`, background: place.color }} onClick={() => setSelected(place)}>{place.icon}</button>)}
-              <div className="you-are-here"><i /> You are here</div>
-              <div className="map-tools"><button onClick={() => toast("Map zoomed in")}>+</button><button onClick={() => toast("Map zoomed out")}>−</button></div>
-              {selected && <div className="map-popup"><button aria-label="Close place details" onClick={() => setSelected(null)}>×</button><span style={{ background: selected.color }}>{selected.icon}</span><div><small>{selected.category}</small><b>{selected.name}</b><em>{selected.distance} walk · {selected.hours}</em></div></div>}
+            <div className="map osm-map">
+              <iframe
+                title="OpenStreetMap of the University of Cape Coast"
+                src="https://www.openstreetmap.org/export/embed.html?bbox=-1.302%2C5.088%2C-1.262%2C5.125&amp;layer=mapnik&amp;marker=5.104722%2C-1.282847"
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+              <div className="osm-topbar">
+                <span><i /> University of Cape Coast</span>
+                <a href="https://www.openstreetmap.org/?mlat=5.104722&amp;mlon=-1.282847#map=16/5.104722/-1.282847" target="_blank" rel="noreferrer">Open full map ↗</a>
+              </div>
+              {selected && <div className="osm-detail">
+                <span style={{ background: selected.color }}>{selected.icon}</span>
+                <div><small>SELECTED PLACE</small><b>{selected.name}</b><em>{selected.distance} walk · {selected.hours}</em></div>
+                <a href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(`${selected.name}, University of Cape Coast, Ghana`)}`} target="_blank" rel="noreferrer">View on OSM →</a>
+              </div>}
+              <div className="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></div>
             </div>
             <aside className="place-list">
               <div className="list-head"><b>Nearby places</b><span>{filtered.length} results</span></div>
