@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Place = {
   id: number;
@@ -13,6 +13,11 @@ type Place = {
   x: number;
   y: number;
   accessible?: boolean;
+};
+
+type Account = {
+  identity: { displayName: string; email: string; fullName: string | null } | null;
+  profile: { id: string; email: string; fullName: string; studentId: string; programme: string; level: string; createdAt: string } | null;
 };
 
 const places: Place[] = [
@@ -50,6 +55,44 @@ export default function Home() {
     { from: "ai", text: "Hi Adwoa! I answer using verified University of Cape Coast information. Where would you like to go?" },
   ]);
   const [message, setMessage] = useState("");
+  const [account, setAccount] = useState<Account>({ identity: null, profile: null });
+  const [accountLoading, setAccountLoading] = useState(true);
+  const [accountError, setAccountError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/account", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => setAccount(data))
+      .catch(() => setAccountError("Account details could not be loaded."))
+      .finally(() => setAccountLoading(false));
+  }, []);
+
+  const accountName = account.profile?.fullName ?? account.identity?.displayName ?? "Create account";
+  const accountInitials = accountName === "Create account" ? "+" : accountName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+  async function saveAccount(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAccountError("");
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/account", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fullName: form.get("fullName"),
+        studentId: form.get("studentId"),
+        programme: form.get("programme"),
+        level: form.get("level"),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setAccountError(data.error ?? "Account could not be saved.");
+      return;
+    }
+    setAccount(data);
+    setPanel(null);
+    toast(account.profile ? "Profile updated" : "Your UCC Connect account is ready");
+  }
 
   const filtered = useMemo(() => places.filter((place) => {
     const matchesCategory = category === "All places" || place.category === category;
@@ -103,7 +146,7 @@ export default function Home() {
         </nav>
         <div className="header-actions">
           <button className="icon-button" aria-label="Notifications" onClick={() => toast("You’re all caught up")}>♢<b>3</b></button>
-          <button className="profile" onClick={() => setPanel("profile")}><span>AM</span><em>Adwoa Mensah<small>UCC Student</small></em><i>⌄</i></button>
+          <button className="profile" onClick={() => setPanel("profile")} disabled={accountLoading}><span>{accountInitials}</span><em>{accountLoading ? "Loading…" : accountName}<small>{account.profile ? `${account.profile.level} · ${account.profile.studentId}` : account.identity ? "Complete your UCC profile" : "Sign in to continue"}</small></em><i>⌄</i></button>
         </div>
       </header>
 
@@ -225,10 +268,38 @@ export default function Home() {
               <button className="primary-action" type="submit">Submit report</button>
             </form>
           </>}
-          {panel === "profile" && <>
-            <div className="profile-large">AM</div><h2>Adwoa Mensah</h2><p className="modal-subtitle">UCC Student · Computer Science & IT</p>
+          {panel === "profile" && !account.identity && <>
+            <div className="modal-icon account-icon">◎</div><h2>Create your account</h2>
+            <p className="modal-subtitle">Sign in securely to create your UCC Campus Connect profile. Your password is never shared with this app.</p>
+            <div className="account-benefits"><span>✓ Save your profile across devices</span><span>✓ Keep your campus activity private</span><span>✓ Sign out at any time</span></div>
+            <a className="primary-action action-link" href="/signin-with-chatgpt?return_to=%2F">Sign in with ChatGPT</a>
+          </>}
+          {panel === "profile" && account.identity && !account.profile && <>
+            <div className="profile-large">{accountInitials}</div><h2>Complete your UCC profile</h2>
+            <p className="modal-subtitle">Signed in as {account.identity.email}</p>
+            <form onSubmit={saveAccount}>
+              <label>Full name<input name="fullName" required minLength={2} defaultValue={account.identity.fullName ?? ""} placeholder="Your full name" /></label>
+              <label>UCC student or staff ID<input name="studentId" required minLength={4} placeholder="e.g. PS/CSC/24/0001" /></label>
+              <label>Programme or department<input name="programme" required minLength={2} placeholder="e.g. BSc Computer Science" /></label>
+              <label>Level<select name="level" defaultValue="100"><option>100</option><option>200</option><option>300</option><option>400</option><option>500</option><option>Graduate</option><option>Staff</option></select></label>
+              {accountError && <p className="form-error">{accountError}</p>}
+              <button className="primary-action" type="submit">Create my account</button>
+            </form>
+            <a className="signout-link" href="/signout-with-chatgpt?return_to=%2F">Sign out</a>
+          </>}
+          {panel === "profile" && account.profile && <>
+            <div className="profile-large">{accountInitials}</div><h2>{account.profile.fullName}</h2>
+            <p className="modal-subtitle">{account.profile.programme} · Level {account.profile.level}<br />{account.profile.studentId}</p>
             <div className="stats"><div><b>{saved.length}</b><span>Saved places</span></div><div><b>2</b><span>Open reports</span></div><div><b>8</b><span>Places visited</span></div></div>
-            <button className="primary-action" onClick={() => { setPanel(null); toast("Profile settings opened"); }}>Manage my profile</button>
+            <details className="edit-profile"><summary>Edit profile</summary><form onSubmit={saveAccount}>
+              <label>Full name<input name="fullName" required defaultValue={account.profile.fullName} /></label>
+              <label>UCC student or staff ID<input name="studentId" required defaultValue={account.profile.studentId} /></label>
+              <label>Programme or department<input name="programme" required defaultValue={account.profile.programme} /></label>
+              <label>Level<select name="level" defaultValue={account.profile.level}><option>100</option><option>200</option><option>300</option><option>400</option><option>500</option><option>Graduate</option><option>Staff</option></select></label>
+              {accountError && <p className="form-error">{accountError}</p>}
+              <button className="primary-action" type="submit">Save changes</button>
+            </form></details>
+            <a className="signout-link" href="/signout-with-chatgpt?return_to=%2F">Sign out of UCC Connect</a>
           </>}
         </section>
       </div>}
