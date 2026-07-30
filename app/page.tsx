@@ -10,8 +10,8 @@ type Place = {
   hours: string;
   icon: string;
   color: string;
-  x: number;
-  y: number;
+  lat: number;
+  lon: number;
   accessible?: boolean;
 };
 
@@ -21,14 +21,14 @@ type Account = {
 };
 
 const places: Place[] = [
-  { id: 1, name: "Sam Jonah Library", category: "Academic", distance: "4 min", hours: "Open until 10 PM", icon: "▤", color: "#003b73", x: 45, y: 35, accessible: true },
-  { id: 2, name: "UCC University Hospital", category: "Health", distance: "8 min", hours: "Emergency care available", icon: "+", color: "#c43d38", x: 71, y: 55, accessible: true },
-  { id: 3, name: "Casford Cafeteria", category: "Food & dining", distance: "5 min", hours: "Northern Campus", icon: "◒", color: "#d79b13", x: 57, y: 74 },
-  { id: 4, name: "Central Administration", category: "Administration", distance: "9 min", hours: "South Campus", icon: "▥", color: "#315fa8", x: 29, y: 62, accessible: true },
-  { id: 5, name: "UCC Security Control", category: "Security", distance: "3 min", hours: "Open 24 hours", icon: "◇", color: "#62499a", x: 76, y: 27 },
-  { id: 6, name: "ADB Bank & ATM", category: "Banking", distance: "6 min", hours: "Near Cafeteria Complex", icon: "₵", color: "#158b83", x: 34, y: 78 },
-  { id: 7, name: "Kwame Nkrumah Hall", category: "Accommodation", distance: "7 min", hours: "Northern Campus", icon: "▦", color: "#8b6237", x: 20, y: 42 },
-  { id: 8, name: "Science Building Complex", category: "Academic", distance: "6 min", hours: "Network & Infrastructure", icon: "⌬", color: "#2f6ca5", x: 65, y: 15, accessible: true },
+  { id: 1, name: "Sam Jonah Library", category: "Academic", distance: "4 min", hours: "Open until 10 PM", icon: "▤", color: "#003b73", lat: 5.1159, lon: -1.2833, accessible: true },
+  { id: 2, name: "UCC University Hospital", category: "Health", distance: "8 min", hours: "Emergency care available", icon: "+", color: "#c43d38", lat: 5.0999, lon: -1.2797, accessible: true },
+  { id: 3, name: "Casford Cafeteria", category: "Food & dining", distance: "5 min", hours: "Northern Campus", icon: "◒", color: "#d79b13", lat: 5.1142, lon: -1.2817 },
+  { id: 4, name: "Central Administration", category: "Administration", distance: "9 min", hours: "South Campus", icon: "▥", color: "#315fa8", lat: 5.1039, lon: -1.2844, accessible: true },
+  { id: 5, name: "UCC Security Control", category: "Security", distance: "3 min", hours: "Open 24 hours", icon: "◇", color: "#62499a", lat: 5.1081, lon: -1.2862 },
+  { id: 6, name: "ADB Bank & ATM", category: "Banking", distance: "6 min", hours: "Near Cafeteria Complex", icon: "₵", color: "#158b83", lat: 5.1131, lon: -1.2809 },
+  { id: 7, name: "Kwame Nkrumah Hall", category: "Accommodation", distance: "7 min", hours: "Northern Campus", icon: "▦", color: "#8b6237", lat: 5.1167, lon: -1.2862 },
+  { id: 8, name: "Science Building Complex", category: "Academic", distance: "6 min", hours: "Network & Infrastructure", icon: "⌬", color: "#2f6ca5", lat: 5.1117, lon: -1.2778, accessible: true },
 ];
 
 const categories = [
@@ -106,6 +106,14 @@ export default function Home() {
     const matchesQuery = `${place.name} ${place.category}`.toLowerCase().includes(query.toLowerCase());
     return matchesCategory && matchesQuery;
   }), [category, query]);
+  const mapLat = selected?.lat ?? 5.104722;
+  const mapLon = selected?.lon ?? -1.282847;
+  const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapLon - 0.004}%2C${mapLat - 0.0035}%2C${mapLon + 0.004}%2C${mapLat + 0.0035}&layer=mapnik&marker=${mapLat}%2C${mapLon}`;
+  const fullMapUrl = `https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}#map=18/${mapLat}/${mapLon}`;
+
+  useEffect(() => {
+    if (filtered.length && (query.trim() || category !== "All places")) setSelected(filtered[0]);
+  }, [filtered, query, category]);
 
   function toast(text: string) {
     setNotice(text);
@@ -167,7 +175,11 @@ export default function Home() {
               <span>⌕</span>
               <input value={query} onChange={(e) => setQuery(e.target.value)} onFocus={() => document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" })} placeholder="Search UCC halls, faculties, services…" aria-label="Search UCC campus" />
               <kbd>⌘ K</kbd>
-              <button onClick={() => document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" })}>Search</button>
+              <button onClick={() => {
+                if (filtered[0]) setSelected(filtered[0]);
+                document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" });
+                if (!filtered.length) toast("No UCC places match that search");
+              }}>Search</button>
             </div>
             <div className="popular"><span>Popular:</span> <button onClick={() => setQuery("Sam Jonah")}>Sam Jonah Library</button><button onClick={() => setQuery("Hall")}>Halls</button><button onClick={() => setQuery("Hospital")}>UCC Hospital</button></div>
           </div>
@@ -201,14 +213,15 @@ export default function Home() {
           <div className="map-directory">
             <div className="map osm-map">
               <iframe
+                key={selected?.id ?? "ucc"}
                 title="OpenStreetMap of the University of Cape Coast"
-                src="https://www.openstreetmap.org/export/embed.html?bbox=-1.302%2C5.088%2C-1.262%2C5.125&amp;layer=mapnik&amp;marker=5.104722%2C-1.282847"
+                src={mapEmbedUrl}
                 loading="lazy"
                 referrerPolicy="strict-origin-when-cross-origin"
               />
               <div className="osm-topbar">
                 <span><i /> University of Cape Coast</span>
-                <a href="https://www.openstreetmap.org/?mlat=5.104722&amp;mlon=-1.282847#map=16/5.104722/-1.282847" target="_blank" rel="noreferrer">Open full map ↗</a>
+                <a href={fullMapUrl} target="_blank" rel="noreferrer">Open full map ↗</a>
               </div>
               {selected && <div className="osm-detail">
                 <span style={{ background: selected.color }}>{selected.icon}</span>
@@ -220,7 +233,7 @@ export default function Home() {
             <aside className="place-list">
               <div className="list-head"><b>Nearby places</b><span>{filtered.length} results</span></div>
               <div className="places-scroll">
-                {filtered.map((place) => <article key={place.id} className={selected?.id === place.id ? "chosen" : ""} onClick={() => setSelected(place)}>
+                {filtered.map((place) => <article key={place.id} className={selected?.id === place.id ? "chosen" : ""} onClick={() => { setSelected(place); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
                   <i style={{ background: `${place.color}18`, color: place.color }}>{place.icon}</i>
                   <div><b>{place.name}</b><span>{place.category} · {place.distance} walk</span><small><em /> {place.hours}{place.accessible && " · ♿ Accessible"}</small></div>
                   <button aria-label={`Save ${place.name}`} onClick={(e) => { e.stopPropagation(); setSaved((s) => s.includes(place.id) ? s.filter((id) => id !== place.id) : [...s, place.id]); }}>{saved.includes(place.id) ? "♥" : "♡"}</button>
