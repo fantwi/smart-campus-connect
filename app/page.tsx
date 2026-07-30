@@ -60,6 +60,15 @@ type TimetableEntry = {
 
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+function distanceMeters(from: { lat: number; lon: number }, to: { lat: number; lon: number }) {
+  const radians = (value: number) => value * Math.PI / 180;
+  const earthRadius = 6371000;
+  const dLat = radians(to.lat - from.lat);
+  const dLon = radians(to.lon - from.lon);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(from.lat)) * Math.cos(radians(to.lat)) * Math.sin(dLon / 2) ** 2;
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function routeInstruction(step: any) {
   const type = step.maneuver?.type ?? "continue";
   const modifier = step.maneuver?.modifier?.replace("_", " ");
@@ -163,11 +172,23 @@ const places: Place[] = [
   { id: 75, name: "Old Library", category: "Academic", distance: "South Campus", hours: "Near Administration Block", icon: "▤", color: "#4b6e9b", lat: 5.1045856, lon: -1.2846844 },
   { id: 76, name: "Administration Block", category: "Academic", distance: "South Campus", hours: "Old Site", icon: "⌬", color: "#6a5792", lat: 5.105474, lon: -1.2841994 },
   { id: 77, name: "Centre for International Education", category: "Academic", distance: "South Campus", hours: "Near University Hospital", icon: "⌬", color: "#925a4b", lat: 5.1062858, lon: -1.2818572 },
+  { id: 78, name: "Sasakawa Restaurant", category: "Dining", distance: "Northern Campus", hours: "Sasakawa Guest House", icon: "●", color: "#bd6f32", lat: 5.1183816, lon: -1.2897789 },
+  { id: 79, name: "Institute of Education Restaurant", category: "Dining", distance: "Northern Campus", hours: "Institute of Education Guest House", icon: "●", color: "#9b6840", lat: 5.1209973, lon: -1.2900602 },
+  { id: 80, name: "Department of Tourism Restaurant", category: "Dining", distance: "Northern Campus", hours: "Near Casely Hayford Hall", icon: "●", color: "#b55f3e", lat: 5.1175852, lon: -1.2853204 },
+  { id: 81, name: "Valco Canteen", category: "Dining", distance: "Northern Campus", hours: "Valco Hall", icon: "●", color: "#a37736", lat: 5.1154835, lon: -1.2826993 },
+  { id: 82, name: "Algorithm Cafe", category: "Dining", distance: "Northern Campus", hours: "Near Casford Road", icon: "●", color: "#8f5c45", lat: 5.117045, lon: -1.2884217 },
+  { id: 83, name: "VOTEC Canteen", category: "Dining", distance: "South Campus", hours: "Near Oguaa Hall", icon: "●", color: "#b26b35", lat: 5.1056861, lon: -1.2865645 },
+  { id: 84, name: "White Castle Restaurant", category: "Dining", distance: "South Campus", hours: "Near UCC Sports Complex", icon: "●", color: "#936645", lat: 5.1021409, lon: -1.2811035 },
+  { id: 85, name: "Pizzaman Chickenman UCC Branch", category: "Dining", distance: "UCC environs", hours: "East of campus", icon: "●", color: "#bd573b", lat: 5.113318, lon: -1.2788652 },
+  { id: 86, name: "Absa ATM", category: "Banking", distance: "Northern Campus", hours: "Science area", icon: "₵", color: "#a94b55", lat: 5.1160348, lon: -1.2926932 },
+  { id: 87, name: "SG-SSB ATM", category: "Banking", distance: "Northern Campus", hours: "Science area", icon: "₵", color: "#3f70a0", lat: 5.1164035, lon: -1.2926894 },
+  { id: 88, name: "Zenith Bank", category: "Banking", distance: "Northern Campus", hours: "Casford Road area", icon: "₵", color: "#7f5a94", lat: 5.1178316, lon: -1.286478 },
+  { id: 89, name: "GCB Bank", category: "Banking", distance: "Northern Campus", hours: "University Avenue area", icon: "₵", color: "#397d76", lat: 5.1151336, lon: -1.2796793 },
 ];
 
 const categories = [
   ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Health", "+"],
-  ["Hostels", "H"], ["Banking", "₵"], ["Recreation", "◉"], ["Landmark", "◆"],
+  ["Hostels", "H"], ["Dining", "●"], ["Banking", "₵"], ["Recreation", "◉"], ["Landmark", "◆"],
 ];
 
 const quickActions = [
@@ -201,6 +222,7 @@ export default function Home() {
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [timetableError, setTimetableError] = useState("");
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [lastReferencedPlace, setLastReferencedPlace] = useState<Place | null>(null);
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -515,6 +537,26 @@ export default function Home() {
     window.speechSynthesis.speak(speech);
   }
 
+  function shareNearbyResults(kind: "food" | "atm" | "library" | "hostel", origin: { lat: number; lon: number }, originLabel: string) {
+    const candidates = places.filter((place) => {
+      if (kind === "food") return place.category === "Dining";
+      if (kind === "atm") return place.category === "Banking";
+      if (kind === "library") return /library/i.test(place.name);
+      return place.category === "Hostels" || place.category === "Accommodation";
+    }).map((place) => ({ place, distance: distanceMeters(origin, place) })).sort((a, b) => a.distance - b.distance).slice(0, 3);
+    if (!candidates.length) {
+      setChat((current) => [...current, { from: "ai", text: `I could not find a mapped ${kind} near ${originLabel}.` }]);
+      return;
+    }
+    const nearest = candidates[0].place;
+    setSelected(nearest);
+    setLastReferencedPlace(nearest);
+    setChat((current) => [...current, {
+      from: "ai",
+      text: `Closest ${kind === "food" ? "food options" : `${kind}s`} to ${originLabel}: ${candidates.map(({ place, distance }) => `${place.name} (${distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(1)} km`})`).join(", ")}. I’ve selected ${nearest.name} on the map.`,
+    }]);
+  }
+
   function sendMessage(prompt?: string) {
     const q = (prompt ?? message).trim();
     if (!q) return;
@@ -530,11 +572,50 @@ export default function Home() {
         .sort((a, b) => b.name.length - a.name.length)
         .find((place) => lower.includes(place.name.toLowerCase()) || (acronymName && place.name.includes(acronymName)));
       const wantsDirections = /\b(direction|directions|route|walk|walking|navigate|get to|how do i get)\b/.test(lower);
+      const wantsDuration = /\b(how long|how far|travel time|walking time)\b/.test(lower);
+      const discoveryKind: "food" | "atm" | "library" | "hostel" | null =
+        /\b(eat|food|restaurant|canteen|cafe)\b/.test(lower) ? "food" :
+        /\b(atm|bank|cash)\b/.test(lower) ? "atm" :
+        /\b(library|libraries)\b/.test(lower) ? "library" :
+        /\b(hostel|hall|accommodation)\b/.test(lower) && /\b(near|nearest|closest)\b/.test(lower) ? "hostel" : null;
+      const wantsDiscovery = Boolean(discoveryKind && /\b(near|nearby|nearest|closest|find|where)\b/.test(lower));
       const personalLead = signedIn ? `${firstName}, ` : "";
       let answer = `${personalLead}I can answer questions about ${places.length} mapped UCC places. Try a facility name, “list lecture halls”, “show hostels in Kwaprow”, “campus weather”, or “my profile”.`;
 
-      if (matchedPlace && wantsDirections) {
+      if (wantsDuration && lastReferencedPlace) {
+        if (route?.destination.id === lastReferencedPlace.id) {
+          answer = `The current walking route to ${lastReferencedPlace.name} is ${(route.distance / 1000).toFixed(1)} km and takes about ${Math.max(1, Math.round(route.duration / 60))} minutes.`;
+        } else if (navigator.geolocation) {
+          setChat((current) => [...current, { from: "ai", text: `I’ll use your current location to calculate the walking time to ${lastReferencedPlace.name}.` }]);
+          navigator.geolocation.getCurrentPosition(({ coords }) => {
+            setCurrentLocation({ lat: coords.latitude, lon: coords.longitude });
+            loadWalkingRoute(coords.latitude, coords.longitude, lastReferencedPlace);
+          }, () => setChat((current) => [...current, { from: "ai", text: "I need location access to calculate your walking time." }]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+          return;
+        }
+      } else if (wantsDiscovery && discoveryKind) {
+        const refersToPrevious = /\b(it|there|that place|the place)\b/.test(lower);
+        const originPlace = refersToPrevious ? lastReferencedPlace : null;
+        if (originPlace) {
+          shareNearbyResults(discoveryKind, originPlace, originPlace.name);
+          return;
+        }
+        if (currentLocation) {
+          shareNearbyResults(discoveryKind, currentLocation, "your current location");
+          return;
+        }
+        if (navigator.geolocation) {
+          setChat((current) => [...current, { from: "ai", text: `Allow location access and I’ll find the closest ${discoveryKind === "food" ? "food options" : discoveryKind} to you.` }]);
+          navigator.geolocation.getCurrentPosition(({ coords }) => {
+            const origin = { lat: coords.latitude, lon: coords.longitude };
+            setCurrentLocation(origin);
+            shareNearbyResults(discoveryKind, origin, "your current location");
+          }, () => setChat((current) => [...current, { from: "ai", text: "Location access is needed for nearby discovery. You can also name a place, then ask what is closest to it." }]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+          return;
+        }
+      } else if (matchedPlace && wantsDirections) {
         setSelected(matchedPlace);
+        setLastReferencedPlace(matchedPlace);
         if (!navigator.geolocation) {
           setChat((current) => [...current, { from: "ai", text: "This browser does not support location services. Open the destination on the Explore UCC map to choose a starting point manually." }]);
           return;
@@ -558,6 +639,7 @@ export default function Home() {
         answer = `Hi${signedIn ? ` ${firstName}` : ""}! Ask me for a campus location, a list of hostels or lecture halls, current weather, emergency help, or information about your account.`;
       } else if (matchedPlace) {
         setSelected(matchedPlace);
+        setLastReferencedPlace(matchedPlace);
         answer = `${matchedPlace.name} is in ${matchedPlace.distance}. ${matchedPlace.hours}.${matchedPlace.accessible ? " It is marked as wheelchair accessible." : ""} I’ve selected it on the Explore UCC map so you can open its exact location.`;
       } else if (lower.includes("weather") || lower.includes("temperature") || lower.includes("rain")) {
         answer = weather && weatherCondition
@@ -613,7 +695,7 @@ export default function Home() {
         <div className="assistant-conversation">
           <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
           <div className="ai-suggestions">
-            {["My next class", "Directions to LLT", "List lecture halls", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
+            {["Where can I eat nearby?", "Find the closest ATM", "Which library is nearest?", "Where is CALC?", "My next class"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
           </div>
           <div className="chat-input">
             <button className={`voice-button ${listening ? "listening" : ""}`} onClick={startVoiceInput} aria-label="Ask Campus AI by voice" title="Ask by voice">{listening ? "●" : "🎙"}</button>
