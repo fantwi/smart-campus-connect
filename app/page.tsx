@@ -21,18 +21,27 @@ type Account = {
 };
 
 const places: Place[] = [
-  { id: 1, name: "Sam Jonah Library", category: "Academic", distance: "4 min", hours: "Open until 10 PM", icon: "▤", color: "#003b73", lat: 5.1164881, lon: -1.2909118, accessible: true },
-  { id: 2, name: "University Hospital", category: "Health", distance: "8 min", hours: "Emergency care available", icon: "+", color: "#c43d38", lat: 5.1051584, lon: -1.2828135, accessible: true },
-  { id: 3, name: "Casely Hayford Hall", category: "Accommodation", distance: "5 min", hours: "Casford Road", icon: "▦", color: "#d79b13", lat: 5.1167009, lon: -1.2842355 },
-  { id: 4, name: "Atlantic Hall", category: "Accommodation", distance: "9 min", hours: "School Bus Road", icon: "▦", color: "#315fa8", lat: 5.105658, lon: -1.2868962, accessible: true },
-  { id: 5, name: "Valco Hall", category: "Accommodation", distance: "6 min", hours: "University Avenue", icon: "▦", color: "#62499a", lat: 5.1158808, lon: -1.2824973 },
-  { id: 6, name: "ADB Bank", category: "Banking", distance: "6 min", hours: "Casford Road", icon: "₵", color: "#158b83", lat: 5.1176325, lon: -1.2856637 },
-  { id: 7, name: "Kwame Nkrumah Hall", category: "Accommodation", distance: "7 min", hours: "University Avenue", icon: "▦", color: "#8b6237", lat: 5.1162601, lon: -1.2805715 },
-  { id: 8, name: "Science Annex Building", category: "Academic", distance: "6 min", hours: "Ayensu Road", icon: "⌬", color: "#2f6ca5", lat: 5.1150602, lon: -1.2941921, accessible: true },
+  { id: 1, name: "Sam Jonah Library", category: "Academic", distance: "4 min walk", hours: "Open until 10 PM", icon: "▤", color: "#003b73", lat: 5.1164881, lon: -1.2909118, accessible: true },
+  { id: 2, name: "University Hospital", category: "Health", distance: "On campus", hours: "Emergency care available", icon: "+", color: "#c43d38", lat: 5.1051584, lon: -1.2828135, accessible: true },
+  { id: 3, name: "Casely Hayford Hall", category: "Accommodation", distance: "Northern Campus", hours: "Casford Road", icon: "▦", color: "#d79b13", lat: 5.1167009, lon: -1.2842355 },
+  { id: 4, name: "Atlantic Hall", category: "Accommodation", distance: "South Campus", hours: "School Bus Road", icon: "▦", color: "#315fa8", lat: 5.105658, lon: -1.2868962, accessible: true },
+  { id: 5, name: "Valco Hall", category: "Accommodation", distance: "Northern Campus", hours: "University Avenue", icon: "▦", color: "#62499a", lat: 5.1158808, lon: -1.2824973 },
+  { id: 6, name: "ADB Bank", category: "Banking", distance: "Northern Campus", hours: "Casford Road", icon: "₵", color: "#158b83", lat: 5.1176325, lon: -1.2856637 },
+  { id: 7, name: "Kwame Nkrumah Hall", category: "Accommodation", distance: "Northern Campus", hours: "University Avenue", icon: "▦", color: "#8b6237", lat: 5.1162601, lon: -1.2805715 },
+  { id: 8, name: "Science Annex Building", category: "Academic", distance: "Northern Campus", hours: "Ayensu Road", icon: "⌬", color: "#2f6ca5", lat: 5.1150602, lon: -1.2941921, accessible: true },
+  { id: 9, name: "Oguaa Hall", category: "Accommodation", distance: "South Campus", hours: "School Bus Road", icon: "▦", color: "#99623a", lat: 5.1041491, lon: -1.2863727 },
+  { id: 10, name: "Adehye Hall", category: "Accommodation", distance: "South Campus", hours: "School Bus Road", icon: "▦", color: "#a84f7a", lat: 5.1053955, lon: -1.2862198 },
+  { id: 11, name: "Superannuation Hall", category: "Accommodation", distance: "2.5 km from UCC", hours: "Arku Korsah Road", icon: "▦", color: "#49729b", lat: 5.1335456, lon: -1.2892089 },
+  { id: 12, name: "UCC Sports Complex", category: "Recreation", distance: "On campus", hours: "Near the N1", icon: "◉", color: "#2d8a65", lat: 5.1038328, lon: -1.2811756 },
+  { id: 13, name: "Cape Coast Teaching Hospital", category: "Health", distance: "4 km from UCC", hours: "Estate Road, Pedu", icon: "+", color: "#bd443c", lat: 5.1344245, lon: -1.2663799, accessible: true },
+  { id: 14, name: "Cape Coast Sports Stadium", category: "Recreation", distance: "3.5 km from UCC", hours: "Arku Korsah Road", icon: "◉", color: "#3c79a8", lat: 5.1358596, lon: -1.2824832, accessible: true },
+  { id: 15, name: "Cape Coast Castle", category: "Landmark", distance: "5 km from UCC", hours: "Castle Road, Cape Coast", icon: "◆", color: "#876a42", lat: 5.103627, lon: -1.2411004 },
+  { id: 16, name: "Saint George’s Castle", category: "Landmark", distance: "10 km from UCC", hours: "Elmina", icon: "◆", color: "#69558c", lat: 5.0827429, lon: -1.3482357 },
 ];
 
 const categories = [
-  ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Health", "+"], ["Banking", "₵"],
+  ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Health", "+"],
+  ["Banking", "₵"], ["Recreation", "◉"], ["Landmark", "◆"],
 ];
 
 const quickActions = [
@@ -102,7 +111,7 @@ export default function Home() {
 
   const filtered = useMemo(() => places.filter((place) => {
     const matchesCategory = category === "All places" || place.category === category;
-    const matchesQuery = `${place.name} ${place.category}`.toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = `${place.name} ${place.category} ${place.distance} ${place.hours}`.toLowerCase().includes(query.toLowerCase());
     return matchesCategory && matchesQuery;
   }), [category, query]);
   const mapLat = selected?.lat ?? 5.104722;
@@ -224,7 +233,7 @@ export default function Home() {
               </div>
               {selected && <div className="osm-detail">
                 <span style={{ background: selected.color }}>{selected.icon}</span>
-                <div><small>SELECTED PLACE</small><b>{selected.name}</b><em>{selected.distance} walk · {selected.hours}</em></div>
+                <div><small>SELECTED PLACE</small><b>{selected.name}</b><em>{selected.distance} · {selected.hours}</em></div>
                 <a href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(`${selected.name}, University of Cape Coast, Ghana`)}`} target="_blank" rel="noreferrer">View on OSM →</a>
               </div>}
               <div className="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></div>
@@ -234,7 +243,7 @@ export default function Home() {
               <div className="places-scroll">
                 {filtered.map((place) => <article key={place.id} className={selected?.id === place.id ? "chosen" : ""} onClick={() => { setSelected(place); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
                   <i style={{ background: `${place.color}18`, color: place.color }}>{place.icon}</i>
-                  <div><b>{place.name}</b><span>{place.category} · {place.distance} walk</span><small><em /> {place.hours}{place.accessible && " · ♿ Accessible"}</small></div>
+                  <div><b>{place.name}</b><span>{place.category} · {place.distance}</span><small><em /> {place.hours}{place.accessible && " · ♿ Accessible"}</small></div>
                   <button aria-label={`Save ${place.name}`} onClick={(e) => { e.stopPropagation(); setSaved((s) => s.includes(place.id) ? s.filter((id) => id !== place.id) : [...s, place.id]); }}>{saved.includes(place.id) ? "♥" : "♡"}</button>
                 </article>)}
                 {!filtered.length && <div className="empty">No campus places match your search.</div>}
