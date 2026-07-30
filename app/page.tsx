@@ -36,6 +36,28 @@ type ChatMessage = {
   linkLabel?: string;
 };
 
+type RoutePreview = {
+  destination: Place;
+  distance: number;
+  duration: number;
+  coordinates: [number, number][];
+  steps: { instruction: string; distance: number; duration: number }[];
+  landmarks: Place[];
+  start: { lat: number; lon: number };
+};
+
+function routeInstruction(step: any) {
+  const type = step.maneuver?.type ?? "continue";
+  const modifier = step.maneuver?.modifier?.replace("_", " ");
+  const road = step.name ? ` onto ${step.name}` : "";
+  if (type === "depart") return `Start${road}`;
+  if (type === "arrive") return "You have arrived at your destination";
+  if (type === "turn") return `Turn ${modifier ?? ""}${road}`.replace(/\s+/g, " ").trim();
+  if (type === "new name") return `Continue${road}`;
+  if (type === "roundabout" || type === "rotary") return `Enter the roundabout${step.maneuver?.exit ? ` and take exit ${step.maneuver.exit}` : ""}${road}`;
+  return `${type.charAt(0).toUpperCase() + type.slice(1).replace("_", " ")}${modifier ? ` ${modifier}` : ""}${road}`;
+}
+
 function describeWeather(code: number, isDay: boolean) {
   if (code === 0) return { icon: isDay ? "☀" : "☾", label: "Clear sky" };
   if (code === 1) return { icon: isDay ? "🌤" : "☾", label: "Mainly clear" };
@@ -159,6 +181,9 @@ export default function Home() {
   const [welcomeTime] = useState(() => new Date());
   const [weather, setWeather] = useState<CampusWeather | null>(null);
   const [weatherError, setWeatherError] = useState(false);
+  const [route, setRoute] = useState<RoutePreview | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [listening, setListening] = useState(false);
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -244,6 +269,20 @@ export default function Home() {
   const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapLon - 0.004}%2C${mapLat - 0.0035}%2C${mapLon + 0.004}%2C${mapLat + 0.0035}&layer=mapnik&marker=${mapLat}%2C${mapLon}`;
   const fullMapUrl = `https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}#map=18/${mapLat}/${mapLon}`;
   const weatherCondition = weather ? describeWeather(weather.weatherCode, weather.isDay) : null;
+  const routeDrawing = useMemo(() => {
+    if (!route?.coordinates.length) return null;
+    const lons = route.coordinates.map(([lon]) => lon);
+    const lats = route.coordinates.map(([, lat]) => lat);
+    const minLon = Math.min(...lons) - 0.0007;
+    const maxLon = Math.max(...lons) + 0.0007;
+    const minLat = Math.min(...lats) - 0.00055;
+    const maxLat = Math.max(...lats) + 0.00055;
+    const points = route.coordinates.map(([lon, lat]) => `${((lon - minLon) / (maxLon - minLon)) * 1000},${600 - ((lat - minLat) / (maxLat - minLat)) * 600}`).join(" ");
+    return {
+      points,
+      mapUrl: `https://www.openstreetmap.org/export/embed.html?bbox=${minLon}%2C${minLat}%2C${maxLon}%2C${maxLat}&layer=mapnik`,
+    };
+  }, [route]);
 
   useEffect(() => {
     if (accountLoading) return;
@@ -264,6 +303,90 @@ export default function Home() {
   function toast(text: string) {
     setNotice(text);
     window.setTimeout(() => setNotice(""), 2600);
+  }
+
+  async function loadWalkingRoute(startLat: number, startLon: number, destination: Place) {
+    setRouteLoading(true);
+    setRoute(null);
+    const fallbackUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_foot&route=${startLat}%2C${startLon}%3B${destination.lat}%2C${destination.lon}`;
+    try {
+      const response = await fetch(`https://routing.openstreetmap.de/routed-foot/route/v1/driving/${startLon},${startLat};${destination.lon},${destination.lat}?overview=full&geometries=geojson&steps=true`);
+      if (!response.ok) throw new Error("Routing unavailable");
+      const data = await response.json();
+      const result = data.routes?.[0];
+      if (!result?.geometry?.coordinates) throw new Error("No walking route");
+      const coordinates = result.geometry.coordinates as [number, number][];
+      const landmarkCandidates = places.filter((place) => place.id !== destination.id).map((place) => {
+        const proximity = coordinates.reduce((closest, [lon, lat]) => Math.min(closest, Math.hypot(place.lon - lon, place.lat - lat)), Number.POSITIVE_INFINITY);
+        return { place, proximity };
+      }).filter(({ proximity }) => proximity < 0.0012).sort((a, b) => a.proximity - b.proximity).slice(0, 4).map(({ place }) => place);
+      const steps = (result.legs?.[0]?.steps ?? []).filter((step: any) => step.distance > 2 || step.maneuver?.type === "arrive").map((step: any) => ({
+        instruction: routeInstruction(step),
+        distance: step.distance,
+        duration: step.duration,
+      }));
+      setRoute({
+        destination,
+        distance: result.distance,
+        duration: result.duration,
+        coordinates,
+        steps,
+        landmarks: landmarkCandidates,
+        start: { lat: startLat, lon: startLon },
+      });
+      setChat((current) => [...current, {
+        from: "ai",
+        text: `Your walking route to ${destination.name} is ready: ${(result.distance / 1000).toFixed(1)} km, about ${Math.max(1, Math.round(result.duration / 60))} minutes. I’ve opened the interactive preview with landmarks and step-by-step guidance.`,
+        url: fallbackUrl,
+        linkLabel: "Open route in OpenStreetMap →",
+      }]);
+    } catch {
+      setChat((current) => [...current, {
+        from: "ai",
+        text: `I found your location, but the in-app walking route could not be loaded. You can still open directions to ${destination.name} in OpenStreetMap.`,
+        url: fallbackUrl,
+        linkLabel: `Open directions to ${destination.name} →`,
+      }]);
+    } finally {
+      setRouteLoading(false);
+    }
+  }
+
+  function startVoiceInput() {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast("Voice input is not supported in this browser");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-GH";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => {
+      setListening(false);
+      toast("Voice input could not be started");
+    };
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setMessage(transcript);
+      sendMessage(transcript);
+    };
+    recognition.start();
+  }
+
+  function speakRoute() {
+    if (!route || !("speechSynthesis" in window)) {
+      toast("Spoken directions are not supported in this browser");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const text = `Walking directions to ${route.destination.name}. ${route.steps.map((step) => `${step.instruction}.`).join(" ")}`;
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.lang = "en-GH";
+    speech.rate = 0.92;
+    window.speechSynthesis.speak(speech);
   }
 
   function sendMessage(prompt?: string) {
@@ -293,13 +416,7 @@ export default function Home() {
         setChat((current) => [...current, { from: "ai", text: `I found ${matchedPlace.name}. Allow location access and I’ll create a walking route from where you are now.` }]);
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => {
-            const route = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_foot&route=${coords.latitude}%2C${coords.longitude}%3B${matchedPlace.lat}%2C${matchedPlace.lon}`;
-            setChat((current) => [...current, {
-              from: "ai",
-              text: `Your walking route to ${matchedPlace.name} is ready. It starts from your current location and ends at the exact campus marker.`,
-              url: route,
-              linkLabel: `Open walking directions to ${matchedPlace.name} →`,
-            }]);
+            loadWalkingRoute(coords.latitude, coords.longitude, matchedPlace);
           },
           (error) => {
             const reason = error.code === 1 ? "Location permission was denied" : "Your current location could not be determined";
@@ -352,6 +469,41 @@ export default function Home() {
       setActive("Map");
       document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" });
     } else setPanel(key);
+  }
+
+  function renderAssistant(fullPage = false) {
+    return <>
+      <div className="assistant-heading">
+        <div><div className="modal-icon ai">✦</div><h2>{signedIn ? `${firstName}’s Campus AI` : "UCC Campus AI"}</h2><p className="modal-subtitle">{account.profile ? `Personalized for ${account.profile.programme} · Level ${account.profile.level}` : "Answers grounded in verified UCC information"}</p></div>
+        {!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}
+      </div>
+      <div className={`assistant-layout ${route || routeLoading ? "has-route" : ""}`}>
+        <div className="assistant-conversation">
+          <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
+          <div className="ai-suggestions">
+            {["Directions to LLT", "List lecture halls", "Hostels in Kwaprow", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
+          </div>
+          <div className="chat-input">
+            <button className={`voice-button ${listening ? "listening" : ""}`} onClick={startVoiceInput} aria-label="Ask Campus AI by voice" title="Ask by voice">{listening ? "●" : "🎙"}</button>
+            <input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder={listening ? "Listening…" : "Ask about a place or request directions…"} autoFocus />
+            <button onClick={() => sendMessage()} aria-label="Send message">↑</button>
+          </div>
+        </div>
+        {(route || routeLoading) && <aside className="route-preview">
+          {routeLoading && <div className="route-loading"><span>⌖</span><b>Building your walking route…</b><small>Using your live location and UCC map data</small></div>}
+          {route && routeDrawing && <>
+            <div className="route-summary"><div><span>WALKING ROUTE</span><h3>{route.destination.name}</h3></div><button onClick={speakRoute}>🔊 Speak directions</button></div>
+            <div className="route-metrics"><div><b>{(route.distance / 1000).toFixed(1)} km</b><span>Distance</span></div><div><b>{Math.max(1, Math.round(route.duration / 60))} min</b><span>Estimated walk</span></div><div><b>{route.steps.length}</b><span>Steps</span></div></div>
+            <div className="route-map">
+              <iframe title={`Walking route to ${route.destination.name}`} src={routeDrawing.mapUrl} />
+              <svg viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true"><polyline points={routeDrawing.points} /></svg>
+            </div>
+            {route.landmarks.length > 0 && <div className="route-landmarks"><b>Landmarks along the way</b><div>{route.landmarks.map((place) => <span key={place.id}>{place.icon} {place.name}</span>)}</div></div>}
+            <div className="route-steps"><b>Step-by-step directions</b><ol>{route.steps.map((step, index) => <li key={`${step.instruction}-${index}`}><span>{index + 1}</span><div><b>{step.instruction}</b><small>{step.distance < 1000 ? `${Math.round(step.distance)} m` : `${(step.distance / 1000).toFixed(1)} km`} · {Math.max(1, Math.round(step.duration / 60))} min</small></div></li>)}</ol></div>
+          </>}
+        </aside>}
+      </div>
+    </>;
   }
 
   return (
@@ -486,17 +638,15 @@ export default function Home() {
 
       <button className="floating-ai" onClick={() => setPanel("assistant")} aria-label="Open campus assistant"><span>✦</span><b>Ask Campus AI</b></button>
 
-      {panel && <div className="modal-backdrop" onMouseDown={() => setPanel(null)}>
+      {panel === "assistant-page" && <section className="ai-page" role="dialog" aria-modal="true">
+        <header><a className="brand" href="#top"><span className="brand-mark">UCC</span><span>UCC Campus<small>CONNECT</small></span></a><button onClick={() => setPanel(null)}>← Back to Campus Connect</button></header>
+        <main>{renderAssistant(true)}</main>
+      </section>}
+
+      {panel && panel !== "assistant-page" && <div className="modal-backdrop" onMouseDown={() => setPanel(null)}>
         <section className={`modal ${panel === "assistant" ? "chat-modal" : ""}`} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <button className="modal-close" onClick={() => setPanel(null)}>×</button>
-          {panel === "assistant" && <>
-            <div className="modal-icon ai">✦</div><h2>{signedIn ? `${firstName}’s Campus AI` : "UCC Campus AI"}</h2><p className="modal-subtitle">{account.profile ? `Personalized for ${account.profile.programme} · Level ${account.profile.level}` : "Answers grounded in verified UCC information"}</p>
-            <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
-            <div className="ai-suggestions">
-              {["Directions to LLT", "List lecture halls", "Hostels in Kwaprow", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
-            </div>
-            <div className="chat-input"><input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask about UCC places, facilities, weather, or your profile…" autoFocus /><button onClick={() => sendMessage()}>↑</button></div>
-          </>}
+          {panel === "assistant" && renderAssistant(false)}
           {panel === "emergency" && <>
             <div className="modal-icon emergency">+</div><h2>Emergency help</h2><p className="modal-subtitle">If there is immediate danger, call the appropriate service.</p>
             <div className="contact-list"><a href="tel:0203005175"><span>◇</span><b>UCC emergency line<small>020 300 5175 · Campus response</small></b><em>Call</em></a><a href="tel:0332132447"><span>+</span><b>UCC Health Services<small>03321 32447 · University Hospital</small></b><em>Call</em></a><a href="tel:0205388648"><span>☎</span><b>UCC Fire Service Unit<small>020 538 8648</small></b><em>Call</em></a><a href="tel:112"><span>☎</span><b>National emergency<small>Police, fire and ambulance</small></b><em>112</em></a></div>
