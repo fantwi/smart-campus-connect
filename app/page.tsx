@@ -34,6 +34,7 @@ type ChatMessage = {
   text: string;
   url?: string;
   linkLabel?: string;
+  placeId?: number;
 };
 
 type RoutePreview = {
@@ -67,6 +68,14 @@ type IssueDraft = {
   photo: File | null;
 };
 
+type UserPreferences = {
+  accessibilityRequired: boolean;
+  travelMode: "walking" | "shuttle";
+  savedPlaces: number[];
+  recentQuestions: string[];
+  visitCounts: Record<string, number>;
+};
+
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function distanceMeters(from: { lat: number; lon: number }, to: { lat: number; lon: number }) {
@@ -76,6 +85,16 @@ function distanceMeters(from: { lat: number; lon: number }, to: { lat: number; l
   const dLon = radians(to.lon - from.lon);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(from.lat)) * Math.cos(radians(to.lat)) * Math.sin(dLon / 2) ** 2;
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function placeContact(place: Place) {
+  if (place.id === 1 || place.id === 73 || place.id === 75) return "Sam Jonah Library · +233 31 229 6323";
+  if (place.id === 2) return "UCC Health Services · 03321 32447";
+  if (place.id === 93) return "UCC emergency · 020 300 5175";
+  if (place.id === 94) return "UCC Fire Service · 020 538 8648";
+  if (place.category === "Banking") return `${place.name} campus branch`;
+  if (place.category === "Academic") return "Contact the relevant UCC faculty or department";
+  return "No public contact number listed";
 }
 
 function routeInstruction(step: any) {
@@ -288,6 +307,7 @@ export default function Home() {
   const [shuttleDestinationId, setShuttleDestinationId] = useState(57);
   const [issueDraft, setIssueDraft] = useState<IssueDraft | null>(null);
   const [issueSubmitting, setIssueSubmitting] = useState(false);
+  const [preferences, setPreferences] = useState<UserPreferences>({ accessibilityRequired: false, travelMode: "walking", savedPlaces: [], recentQuestions: [], visitCounts: {} });
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -306,6 +326,17 @@ export default function Home() {
       .then((response) => response.json())
       .then((data) => setTimetable(data.entries ?? []))
       .catch(() => setTimetableError("Your timetable could not be loaded."));
+  }, [account.identity]);
+
+  useEffect(() => {
+    if (!account.identity) return;
+    fetch("/api/preferences", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        setPreferences(data);
+        setSaved(data.savedPlaces ?? []);
+      })
+      .catch(() => undefined);
   }, [account.identity]);
 
   useEffect(() => {
@@ -389,6 +420,31 @@ export default function Home() {
     setTimetable(data.entries ?? []);
     toast(entries.length > 1 ? `${entries.length} classes imported` : "Class added to your timetable");
     return true;
+  }
+
+  async function updatePreferences(patch: Record<string, unknown>) {
+    if (!signedIn) return;
+    try {
+      const response = await fetch("/api/preferences", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPreferences(data);
+        setSaved(data.savedPlaces ?? []);
+      }
+    } catch {
+      // Keep the current session responsive if preference syncing is unavailable.
+    }
+  }
+
+  function toggleSavedPlace(placeId: number) {
+    const next = saved.includes(placeId) ? saved.filter((id) => id !== placeId) : [...saved, placeId];
+    setSaved(next);
+    updatePreferences({ savedPlaces: next });
+    toast(next.includes(placeId) ? "Place saved" : "Place removed from saved");
   }
 
   async function addTimetableEntry(event: React.FormEvent<HTMLFormElement>) {
@@ -554,6 +610,7 @@ export default function Home() {
         text: `Your walking route to ${destination.name} is ready: ${(result.distance / 1000).toFixed(1)} km, about ${Math.max(1, Math.round(result.duration / 60))} minutes. I’ve opened the interactive preview with landmarks and step-by-step guidance.`,
         url: fallbackUrl,
         linkLabel: "Open route in OpenStreetMap →",
+        placeId: destination.id,
       }]);
     } catch {
       setChat((current) => [...current, {
@@ -610,7 +667,11 @@ export default function Home() {
       if (kind === "atm") return place.category === "Banking";
       if (kind === "library") return /library/i.test(place.name);
       return place.category === "Hostels" || place.category === "Accommodation";
-    }).map((place) => ({ place, distance: distanceMeters(origin, place) })).sort((a, b) => a.distance - b.distance).slice(0, 3);
+    }).map((place) => ({ place, distance: distanceMeters(origin, place) })).sort((a, b) => {
+      const accessibilityA = preferences.accessibilityRequired && !a.place.accessible ? 500 : 0;
+      const accessibilityB = preferences.accessibilityRequired && !b.place.accessible ? 500 : 0;
+      return (a.distance + accessibilityA) - (b.distance + accessibilityB);
+    }).slice(0, 3);
     if (!candidates.length) {
       setChat((current) => [...current, { from: "ai", text: `I could not find a mapped ${kind} near ${originLabel}.` }]);
       return;
@@ -621,6 +682,7 @@ export default function Home() {
     setChat((current) => [...current, {
       from: "ai",
       text: `Closest ${kind === "food" ? "food options" : `${kind}s`} to ${originLabel}: ${candidates.map(({ place, distance }) => `${place.name} (${distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(1)} km`})`).join(", ")}. I’ve selected ${nearest.name} on the map.`,
+      placeId: nearest.id,
     }]);
   }
 
@@ -691,6 +753,7 @@ export default function Home() {
     const q = (prompt ?? message).trim();
     if (!q) return;
     setChat((current) => [...current, { from: "user", text: q }]);
+    updatePreferences({ recentQuestion: q });
     setMessage("");
     window.setTimeout(() => {
       const lower = q.toLowerCase();
@@ -707,6 +770,7 @@ export default function Home() {
       const wantsDiscovery = Boolean(discoveryKind && /\b(near|nearby|nearest|closest|find|where)\b/.test(lower));
       const personalLead = signedIn ? `${firstName}, ` : "";
       let answer = `${personalLead}I can answer questions about ${places.length} mapped UCC places. Try a facility name, “list lecture halls”, “show hostels in Kwaprow”, “campus weather”, or “my profile”.`;
+      let responsePlace: Place | null = null;
 
       if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
         submitIssue();
@@ -731,6 +795,7 @@ export default function Home() {
           const eta = Math.max(2, bestRoute.interval - (new Date().getMinutes() % bestRoute.interval));
           setSelected(bestStop.stop);
           setLastReferencedPlace(matchedPlace);
+          responsePlace = bestStop.stop;
           answer = `For ${matchedPlace.name}, use ${bestStop.stop.name} on the ${bestRoute.name}. The stop is about ${Math.round(bestStop.distance)} m from the destination. Planning estimate: the next shuttle is in roughly ${eta} minutes. ${bestRoute.period}. This is not live vehicle tracking, so check notices at the stop.`;
         } else {
           const estimates = shuttleRoutes.map((item) => `${item.name}: about ${Math.max(2, item.interval - (new Date().getMinutes() % item.interval))} min`).join("; ");
@@ -770,6 +835,7 @@ export default function Home() {
       } else if (matchedPlace && wantsDirections) {
         setSelected(matchedPlace);
         setLastReferencedPlace(matchedPlace);
+        updatePreferences({ visitedPlaceId: matchedPlace.id });
         if (!navigator.geolocation) {
           setChat((current) => [...current, { from: "ai", text: "This browser does not support location services. Open the destination on the Explore UCC map to choose a starting point manually." }]);
           return;
@@ -794,6 +860,8 @@ export default function Home() {
       } else if (matchedPlace) {
         setSelected(matchedPlace);
         setLastReferencedPlace(matchedPlace);
+        responsePlace = matchedPlace;
+        updatePreferences({ visitedPlaceId: matchedPlace.id });
         answer = `${matchedPlace.name} is in ${matchedPlace.distance}. ${matchedPlace.hours}.${matchedPlace.accessible ? " It is marked as wheelchair accessible." : ""} I’ve selected it on the Explore UCC map so you can open its exact location.`;
       } else if (lower.includes("weather") || lower.includes("temperature") || lower.includes("rain")) {
         answer = weather && weatherCondition
@@ -827,7 +895,7 @@ export default function Home() {
           ? `Your next class is ${nextClass.entry.courseCode}, ${nextClass.entry.title}, at ${nextClass.entry.venue} on ${dayNames[nextClass.entry.dayOfWeek]} at ${nextClass.entry.startTime}. Ask for directions to ${nextClass.entry.venue} when you are ready to leave.`
           : signedIn ? "Your timetable is empty. Open My timetable to add a class or import a CSV file." : "Sign in to create a personal timetable with reminders and route suggestions.";
       }
-      setChat((current) => [...current, { from: "ai", text: answer }]);
+      setChat((current) => [...current, { from: "ai", text: answer, placeId: responsePlace?.id }]);
     }, 450);
   }
 
@@ -855,7 +923,19 @@ export default function Home() {
       </div>}
       <div className={`assistant-layout ${route || routeLoading ? "has-route" : ""}`}>
         <div className="assistant-conversation">
-          <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
+          <div className="chat-log">{chat.map((item, index) => {
+            const cardPlace = item.placeId ? places.find((place) => place.id === item.placeId) : null;
+            const cardMap = cardPlace ? `https://www.openstreetmap.org/export/embed.html?bbox=${cardPlace.lon - 0.002}%2C${cardPlace.lat - 0.0017}%2C${cardPlace.lon + 0.002}%2C${cardPlace.lat + 0.0017}&layer=mapnik&marker=${cardPlace.lat}%2C${cardPlace.lon}` : "";
+            return <div key={index} className={`chat-message ${item.from}`}>
+              <div className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>
+              {cardPlace && <article className="facility-card">
+                <div className="facility-map"><iframe title={`Map preview of ${cardPlace.name}`} src={cardMap} loading="lazy" /></div>
+                <div className="facility-card-body"><div className="facility-title"><span style={{ background: cardPlace.color }}>{cardPlace.icon}</span><div><b>{cardPlace.name}</b><small>{cardPlace.category} · {cardPlace.distance}</small></div></div>
+                <div className="facility-facts"><span><b>Hours / location</b>{cardPlace.hours}</span><span><b>Accessibility</b>{cardPlace.accessible ? "♿ Accessible" : "Not confirmed"}</span><span><b>Contact</b>{placeContact(cardPlace)}</span></div>
+                <div className="facility-actions"><button onClick={() => sendMessage(`${preferences.travelMode === "shuttle" ? "Shuttle" : "Directions"} to ${cardPlace.name}`)}>⌖ {preferences.travelMode === "shuttle" ? "Shuttle route" : "Directions"}</button><button onClick={() => toggleSavedPlace(cardPlace.id)}>{saved.includes(cardPlace.id) ? "♥ Saved" : "♡ Save"}</button><button onClick={() => { setSelected(cardPlace); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Open map</button></div></div>
+              </article>}
+            </div>;
+          })}</div>
           <div className="ai-suggestions">
             {["Shuttle to CALC", "Where is Casfod?", "Find the closest ATM", "Which library is nearest?", "My next class"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
           </div>
@@ -984,7 +1064,7 @@ export default function Home() {
                 {filtered.map((place) => <article key={place.id} className={selected?.id === place.id ? "chosen" : ""} onClick={() => { setSelected(place); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
                   <i style={{ background: `${place.color}18`, color: place.color }}>{place.icon}</i>
                   <div><b>{place.name}</b><span>{place.category} · {place.distance}</span><small><em /> {place.hours}{place.accessible && " · ♿ Accessible"}</small></div>
-                  <button aria-label={`Save ${place.name}`} onClick={(e) => { e.stopPropagation(); setSaved((s) => s.includes(place.id) ? s.filter((id) => id !== place.id) : [...s, place.id]); }}>{saved.includes(place.id) ? "♥" : "♡"}</button>
+                  <button aria-label={`Save ${place.name}`} onClick={(e) => { e.stopPropagation(); toggleSavedPlace(place.id); }}>{saved.includes(place.id) ? "♥" : "♡"}</button>
                 </article>)}
                 {!filtered.length && <div className="empty">No campus places match your search.</div>}
               </div>
@@ -1089,7 +1169,11 @@ export default function Home() {
           {panel === "profile" && account.profile && <>
             <div className="profile-large">{accountInitials}</div><h2>{account.profile.fullName}</h2>
             <p className="modal-subtitle">{account.profile.programme} · Level {account.profile.level}<br />{account.profile.studentId}</p>
-            <div className="stats"><div><b>{saved.length}</b><span>Saved places</span></div><div><b>2</b><span>Open reports</span></div><div><b>8</b><span>Places visited</span></div></div>
+            <div className="stats"><div><b>{saved.length}</b><span>Saved places</span></div><div><b>2</b><span>Open reports</span></div><div><b>{Object.values(preferences.visitCounts).reduce((total, count) => total + count, 0)}</b><span>Place views</span></div></div>
+            <div className="preference-panel"><h3>Campus AI preferences</h3><label className="preference-toggle"><input type="checkbox" checked={preferences.accessibilityRequired} onChange={(event) => updatePreferences({ accessibilityRequired: event.target.checked })} /><span><b>Prioritize accessible places</b><small>Highlight confirmed accessible facilities and routes</small></span></label><label>Preferred travel mode<select value={preferences.travelMode} onChange={(event) => updatePreferences({ travelMode: event.target.value })}><option value="walking">Walking</option><option value="shuttle">Campus shuttle</option></select></label>
+              {Object.keys(preferences.visitCounts).length > 0 && <div className="memory-list"><b>Frequently visited</b><span>{Object.entries(preferences.visitCounts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([id]) => places.find((place) => place.id === Number(id))?.name).filter(Boolean).join(" · ")}</span></div>}
+              {preferences.recentQuestions.length > 0 && <div className="memory-list"><b>Recent questions</b><div>{preferences.recentQuestions.slice(0, 4).map((question) => <button key={question} onClick={() => { setPanel("assistant"); sendMessage(question); }}>{question}</button>)}</div></div>}
+            </div>
             <details className="edit-profile"><summary>Edit profile</summary><form onSubmit={saveAccount}>
               <label>Full name<input name="fullName" required defaultValue={account.profile.fullName} /></label>
               <label>UCC student or staff ID<input name="studentId" required defaultValue={account.profile.studentId} /></label>

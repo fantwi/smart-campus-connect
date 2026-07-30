@@ -38,3 +38,13 @@ export const issueReports = sqliteTable("issue_reports", {
   status: text("status").notNull().default("submitted"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const userPreferences = sqliteTable("user_preferences", {
+  email: text("email").primaryKey(),
+  accessibilityRequired: integer("accessibility_required").notNull().default(0),
+  travelMode: text("travel_mode").notNull().default("walking"),
+  savedPlaces: text("saved_places").notNull().default("[]"),
+  recentQuestions: text("recent_questions").notNull().default("[]"),
+  visitCounts: text("visit_counts").notNull().default("{}"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
