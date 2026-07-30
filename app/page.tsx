@@ -184,11 +184,62 @@ const places: Place[] = [
   { id: 87, name: "SG-SSB ATM", category: "Banking", distance: "Northern Campus", hours: "Science area", icon: "₵", color: "#3f70a0", lat: 5.1164035, lon: -1.2926894 },
   { id: 88, name: "Zenith Bank", category: "Banking", distance: "Northern Campus", hours: "Casford Road area", icon: "₵", color: "#7f5a94", lat: 5.1178316, lon: -1.286478 },
   { id: 89, name: "GCB Bank", category: "Banking", distance: "Northern Campus", hours: "University Avenue area", icon: "₵", color: "#397d76", lat: 5.1151336, lon: -1.2796793 },
+  { id: 90, name: "Old Site Shuttle Station", category: "Transport", distance: "South Campus", hours: "Near Oguaa and Adehye halls", icon: "↔", color: "#34745d", lat: 5.1054253, lon: -1.2858249, accessible: true },
+  { id: 91, name: "Science Shuttle Station", category: "Transport", distance: "Northern Campus", hours: "Opposite Sam Jonah Library", icon: "↔", color: "#356b91", lat: 5.1167122, lon: -1.2922016, accessible: true },
+  { id: 92, name: "Valco Shuttle Station", category: "Transport", distance: "Northern Campus", hours: "Near Valco Hall", icon: "↔", color: "#7a5c93", lat: 5.11538, lon: -1.2818592, accessible: true },
 ];
+
+const destinationAliases: Record<string, number> = {
+  "calc": 57, "c a ackah": 57, "ackah theatre": 57, "albert koomson": 57,
+  "llt": 56, "large lecture": 56, "nlt": 58, "new lecture": 58, "swlt": 59, "sandwich theatre": 59,
+  "main library": 1, "central library": 1, "sam jona": 1, "sam jonah": 1, "jonah library": 1, "jona libray": 1,
+  "casford": 3, "casfod": 3, "casely": 3, "atl": 4, "atlantic": 4, "knh": 7, "nkrumah": 7,
+  "ucc hospital": 2, "campus hospital": 2, "student clinic": 2,
+  "science": 8, "science annex": 8, "main auditorium": 61, "ucc auditorium": 61, "900": 60,
+  "sob": 65, "business school": 65, "sms": 66, "medical school": 66, "sgs": 68, "graduate school": 68,
+  "code": 69, "distance education": 69, "ids": 72, "old admin": 76, "new admin": 74,
+  "old site station": 90, "old site shuttle": 90, "science station": 91, "science shuttle": 91, "valco station": 92,
+};
+
+const shuttleRoutes = [
+  { name: "Campus Connector", stops: [90, 91, 92], period: "Academic days · operating times follow posted campus notices", interval: 15 },
+  { name: "Old Site–Science Link", stops: [90, 91], period: "Academic days · peak teaching periods", interval: 12 },
+  { name: "Science–Valco Link", stops: [91, 92], period: "Academic days · peak teaching periods", interval: 15 },
+];
+
+function normalizeDestination(value: string) {
+  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function editDistance(a: string, b: string) {
+  const matrix = Array.from({ length: b.length + 1 }, (_, row) => [row, ...Array(a.length).fill(0)]);
+  for (let column = 0; column <= a.length; column++) matrix[0][column] = column;
+  for (let row = 1; row <= b.length; row++) for (let column = 1; column <= a.length; column++) {
+    matrix[row][column] = b[row - 1] === a[column - 1] ? matrix[row - 1][column - 1] : 1 + Math.min(matrix[row - 1][column - 1], matrix[row][column - 1], matrix[row - 1][column]);
+  }
+  return matrix[b.length][a.length];
+}
+
+function findDestination(input: string) {
+  const normalized = normalizeDestination(input);
+  const alias = Object.entries(destinationAliases).sort((a, b) => b[0].length - a[0].length).find(([name]) => normalized.includes(name));
+  if (alias) return places.find((place) => place.id === alias[1]) ?? null;
+  const direct = places.slice().sort((a, b) => b.name.length - a.name.length).find((place) => normalized.includes(normalizeDestination(place.name)));
+  if (direct) return direct;
+  const queryWords = normalized.split(" ").filter((word) => word.length > 2 && !["where", "find", "show", "directions", "direction", "route", "walk", "shuttle", "please", "campus"].includes(word));
+  let best: { place: Place; score: number } | null = null;
+  for (const place of places) {
+    const placeWords = normalizeDestination(place.name).split(" ").filter((word) => word.length > 2);
+    const matches = queryWords.filter((queryWord) => placeWords.some((placeWord) => editDistance(queryWord, placeWord) <= Math.max(1, Math.floor(placeWord.length * 0.28)))).length;
+    const score = matches / Math.max(queryWords.length, placeWords.length * 0.65, 1);
+    if (!best || score > best.score) best = { place, score };
+  }
+  return best && best.score >= 0.42 ? best.place : null;
+}
 
 const categories = [
   ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Health", "+"],
-  ["Hostels", "H"], ["Dining", "●"], ["Banking", "₵"], ["Recreation", "◉"], ["Landmark", "◆"],
+  ["Hostels", "H"], ["Dining", "●"], ["Banking", "₵"], ["Transport", "↔"], ["Recreation", "◉"], ["Landmark", "◆"],
 ];
 
 const quickActions = [
@@ -223,6 +274,7 @@ export default function Home() {
   const [timetableError, setTimetableError] = useState("");
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [lastReferencedPlace, setLastReferencedPlace] = useState<Place | null>(null);
+  const [shuttleDestinationId, setShuttleDestinationId] = useState(57);
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -431,6 +483,8 @@ export default function Home() {
     if (account.profile && !timetable.length) suggestions.push({ title: `Set up your Level ${account.profile.level} timetable`, detail: `Add ${account.profile.programme} classes for reminders and departure guidance.` });
     return suggestions.slice(0, 3);
   }, [nextClass, currentLocation, weather, account.profile, timetable.length]);
+  const shuttleDestination = places.find((place) => place.id === shuttleDestinationId) ?? places[56];
+  const recommendedShuttleStop = places.filter((place) => place.category === "Transport").map((stop) => ({ stop, distance: distanceMeters(stop, shuttleDestination) })).sort((a, b) => a.distance - b.distance)[0];
 
   useEffect(() => {
     if (accountLoading) return;
@@ -564,14 +618,9 @@ export default function Home() {
     setMessage("");
     window.setTimeout(() => {
       const lower = q.toLowerCase();
-      const compact = lower.replace(/[^a-z0-9]/g, "");
-      const acronymMatch: Record<string, string> = { llt: "Large Lecture Theatre", calc: "C. A. Ackah", nlt: "New Lecture Theatre", swlt: "Sandwich Lecture", ids: "Institute for Development Studies" };
-      const acronymName = Object.entries(acronymMatch).find(([key]) => compact.includes(key))?.[1];
-      const matchedPlace = places
-        .slice()
-        .sort((a, b) => b.name.length - a.name.length)
-        .find((place) => lower.includes(place.name.toLowerCase()) || (acronymName && place.name.includes(acronymName)));
+      const matchedPlace = findDestination(q);
       const wantsDirections = /\b(direction|directions|route|walk|walking|navigate|get to|how do i get)\b/.test(lower);
+      const wantsShuttle = /\b(shuttle|campus bus|bus stop|next bus)\b/.test(lower);
       const wantsDuration = /\b(how long|how far|travel time|walking time)\b/.test(lower);
       const discoveryKind: "food" | "atm" | "library" | "hostel" | null =
         /\b(eat|food|restaurant|canteen|cafe)\b/.test(lower) ? "food" :
@@ -582,7 +631,20 @@ export default function Home() {
       const personalLead = signedIn ? `${firstName}, ` : "";
       let answer = `${personalLead}I can answer questions about ${places.length} mapped UCC places. Try a facility name, “list lecture halls”, “show hostels in Kwaprow”, “campus weather”, or “my profile”.`;
 
-      if (wantsDuration && lastReferencedPlace) {
+      if (wantsShuttle) {
+        if (matchedPlace && matchedPlace.category !== "Transport") {
+          const stops = places.filter((place) => place.category === "Transport");
+          const bestStop = stops.map((stop) => ({ stop, distance: distanceMeters(stop, matchedPlace) })).sort((a, b) => a.distance - b.distance)[0];
+          const bestRoute = shuttleRoutes.find((item) => item.stops.includes(bestStop.stop.id)) ?? shuttleRoutes[0];
+          const eta = Math.max(2, bestRoute.interval - (new Date().getMinutes() % bestRoute.interval));
+          setSelected(bestStop.stop);
+          setLastReferencedPlace(matchedPlace);
+          answer = `For ${matchedPlace.name}, use ${bestStop.stop.name} on the ${bestRoute.name}. The stop is about ${Math.round(bestStop.distance)} m from the destination. Planning estimate: the next shuttle is in roughly ${eta} minutes. ${bestRoute.period}. This is not live vehicle tracking, so check notices at the stop.`;
+        } else {
+          const estimates = shuttleRoutes.map((item) => `${item.name}: about ${Math.max(2, item.interval - (new Date().getMinutes() % item.interval))} min`).join("; ");
+          answer = `UCC shuttles connect Old Site, Science, and Valco. Current planning estimates are ${estimates}. These are frequency-based estimates, not live bus positions. Open the Shuttle assistant for stops, routes, and operating information.`;
+        }
+      } else if (wantsDuration && lastReferencedPlace) {
         if (route?.destination.id === lastReferencedPlace.id) {
           answer = `The current walking route to ${lastReferencedPlace.name} is ${(route.distance / 1000).toFixed(1)} km and takes about ${Math.max(1, Math.round(route.duration / 60))} minutes.`;
         } else if (navigator.geolocation) {
@@ -688,14 +750,14 @@ export default function Home() {
     return <>
       <div className="assistant-heading">
         <div><div className="modal-icon ai">✦</div><h2>{signedIn ? `${firstName}’s Campus AI` : "UCC Campus AI"}</h2><p className="modal-subtitle">{account.profile ? `Personalized for ${account.profile.programme} · Level ${account.profile.level}` : "Answers grounded in verified UCC information"}</p></div>
-        <div className="assistant-head-actions"><button className="ai-page-link" onClick={() => setPanel("timetable")}>▦ My timetable</button>{!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}</div>
+        <div className="assistant-head-actions"><button className="ai-page-link" onClick={() => setPanel("shuttle")}>↔ Shuttle assistant</button><button className="ai-page-link" onClick={() => setPanel("timetable")}>▦ My timetable</button>{!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}</div>
       </div>
       {contextSuggestions.length > 0 && <div className="context-suggestions">{contextSuggestions.map((suggestion) => <button key={suggestion.title} onClick={() => suggestion.action ? sendMessage(suggestion.action) : undefined}><span>✦</span><div><b>{suggestion.title}</b><small>{suggestion.detail}</small></div>{suggestion.action && <em>→</em>}</button>)}</div>}
       <div className={`assistant-layout ${route || routeLoading ? "has-route" : ""}`}>
         <div className="assistant-conversation">
           <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
           <div className="ai-suggestions">
-            {["Where can I eat nearby?", "Find the closest ATM", "Which library is nearest?", "Where is CALC?", "My next class"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
+            {["Shuttle to CALC", "Where is Casfod?", "Find the closest ATM", "Which library is nearest?", "My next class"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
           </div>
           <div className="chat-input">
             <button className={`voice-button ${listening ? "listening" : ""}`} onClick={startVoiceInput} aria-label="Ask Campus AI by voice" title="Ask by voice">{listening ? "●" : "🎙"}</button>
@@ -877,6 +939,17 @@ export default function Home() {
             <label className="csv-import">Import CSV timetable<input type="file" accept=".csv,text/csv" onChange={(event) => event.target.files?.[0] && importTimetable(event.target.files[0])} /><small>Columns: course, title, day, start, end, venue, reminder</small></label>
             {timetableError && <p className="form-error">{timetableError}</p>}
             <div className="timetable-list">{timetable.map((entry) => <article key={entry.id}><time><b>{entry.startTime}</b><small>{dayNames[entry.dayOfWeek].slice(0, 3)}</small></time><div><b>{entry.courseCode} · {entry.title}</b><span>{entry.venue} · until {entry.endTime}</span></div><button onClick={() => deleteTimetableEntry(entry.id)} aria-label={`Remove ${entry.courseCode}`}>×</button></article>)}{!timetable.length && <div className="empty">No classes yet. Add one above or import a CSV timetable.</div>}</div>
+          </>}
+          {panel === "shuttle" && <>
+            <div className="modal-icon ai">↔</div><h2>Campus shuttle assistant</h2><p className="modal-subtitle">Mapped UCC stops, route guidance, and frequency-based arrival estimates.</p>
+            <label>Where are you going?<select value={shuttleDestinationId} onChange={(event) => setShuttleDestinationId(Number(event.target.value))}>{places.filter((place) => place.category !== "Transport" && place.category !== "Landmark").map((place) => <option value={place.id} key={place.id}>{place.name}</option>)}</select></label>
+            <div className="best-stop"><span>BEST STOP</span><b>{recommendedShuttleStop.stop.name}</b><small>About {Math.round(recommendedShuttleStop.distance)} m from {shuttleDestination.name}</small><button onClick={() => { setSelected(recommendedShuttleStop.stop); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Show stop on map →</button></div>
+            <div className="shuttle-routes">{shuttleRoutes.map((item) => {
+              const stopNames = item.stops.map((id) => places.find((place) => place.id === id)?.name.replace(" Shuttle Station", "")).join(" → ");
+              const estimate = Math.max(2, item.interval - (new Date().getMinutes() % item.interval));
+              return <article key={item.name}><div><b>{item.name}</b><span>{stopNames}</span><small>{item.period}</small></div><em><b>~{estimate} min</b><span>estimated</span></em></article>;
+            })}</div>
+            <p className="shuttle-disclaimer">Arrival times are planning estimates based on route frequency, not live vehicle tracking. Confirm current operations at posted station notices.</p>
           </>}
           {panel === "emergency" && <>
             <div className="modal-icon emergency">+</div><h2>Emergency help</h2><p className="modal-subtitle">If there is immediate danger, call the appropriate service.</p>
