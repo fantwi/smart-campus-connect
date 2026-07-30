@@ -30,11 +30,25 @@ type CampusWeather = {
 };
 
 type ChatMessage = {
+  id?: string;
   from: "ai" | "user";
   text: string;
+  question?: string;
   url?: string;
   linkLabel?: string;
   placeId?: number;
+  updates?: CampusUpdate[];
+};
+
+type CampusUpdate = {
+  id: string;
+  title: string;
+  summary: string;
+  startDate: string;
+  endDate: string;
+  category: string;
+  source: string;
+  url: string;
 };
 
 type RoutePreview = {
@@ -308,6 +322,11 @@ export default function Home() {
   const [issueDraft, setIssueDraft] = useState<IssueDraft | null>(null);
   const [issueSubmitting, setIssueSubmitting] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferences>({ accessibilityRequired: false, travelMode: "walking", savedPlaces: [], recentQuestions: [], visitCounts: {} });
+  const [campusUpdates, setCampusUpdates] = useState<CampusUpdate[]>([]);
+  const [updatesLoading, setUpdatesLoading] = useState(true);
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({});
+  const [correctionTarget, setCorrectionTarget] = useState<string | null>(null);
+  const [correctionText, setCorrectionText] = useState("");
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -338,6 +357,17 @@ export default function Home() {
       })
       .catch(() => undefined);
   }, [account.identity]);
+
+  useEffect(() => {
+    fetch("/api/campus-updates")
+      .then((response) => {
+        if (!response.ok) throw new Error("Updates unavailable");
+        return response.json();
+      })
+      .then((data) => setCampusUpdates(data.updates ?? []))
+      .catch(() => setCampusUpdates([]))
+      .finally(() => setUpdatesLoading(false));
+  }, []);
 
   useEffect(() => {
     let activeRequest = true;
@@ -749,6 +779,25 @@ export default function Home() {
     }, () => toast("Location access was not available"), { enableHighAccuracy: true, timeout: 12000 });
   }
 
+  async function submitAiFeedback(item: ChatMessage, rating: "helpful" | "not_helpful" | "incorrect") {
+    if (!item.id || feedbackGiven[item.id]) return;
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageId: item.id, rating, question: item.question, answer: item.text, correction: rating === "incorrect" ? correctionText : undefined, placeId: item.placeId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Feedback could not be saved.");
+      setFeedbackGiven((current) => ({ ...current, [item.id!]: rating }));
+      setCorrectionTarget(null);
+      setCorrectionText("");
+      toast(rating === "helpful" ? "Thanks for your feedback" : "Feedback saved for review");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Feedback could not be saved");
+    }
+  }
+
   function sendMessage(prompt?: string) {
     const q = (prompt ?? message).trim();
     if (!q) return;
@@ -762,6 +811,7 @@ export default function Home() {
       const wantsShuttle = /\b(shuttle|campus bus|bus stop|next bus)\b/.test(lower);
       const wantsIssueReport = /\b(report|broken|faulty|leak|leaking|no water|security concern|damaged|damage|not working)\b/.test(lower);
       const wantsDuration = /\b(how long|how far|travel time|walking time)\b/.test(lower);
+      const wantsCampusUpdates = /\b(event|events|announcement|announcements|seminar|seminars|workshop|conference|src|deadline|deadlines|exam|exams|examination|examinations|academic calendar|registration date)\b/.test(lower);
       const discoveryKind: "food" | "atm" | "library" | "hostel" | null =
         /\b(eat|food|restaurant|canteen|cafe)\b/.test(lower) ? "food" :
         /\b(atm|bank|cash)\b/.test(lower) ? "atm" :
@@ -771,8 +821,19 @@ export default function Home() {
       const personalLead = signedIn ? `${firstName}, ` : "";
       let answer = `${personalLead}I can answer questions about ${places.length} mapped UCC places. Try a facility name, “list lecture halls”, “show hostels in Kwaprow”, “campus weather”, or “my profile”.`;
       let responsePlace: Place | null = null;
+      let responseUpdates: CampusUpdate[] | undefined;
 
-      if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
+      if (wantsCampusUpdates) {
+        const terms = lower.split(/\W+/).filter((term) => term.length > 3 && !["what", "when", "show", "about", "latest", "current"].includes(term));
+        const matches = campusUpdates.filter((update) => {
+          const haystack = `${update.title} ${update.summary} ${update.category}`.toLowerCase();
+          return terms.length === 0 || terms.some((term) => haystack.includes(term) || (term.startsWith("exam") && haystack.includes("examination")));
+        });
+        responseUpdates = (matches.length ? matches : campusUpdates).slice(0, 4);
+        answer = responseUpdates.length
+          ? `Here are ${responseUpdates.length} relevant items from official UCC event and academic-calendar sources. Open a card for the complete university notice.`
+          : "I could not reach the current UCC updates feed just now. Please check the official UCC Events portal.";
+      } else if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
         submitIssue();
         return;
       } else if (wantsIssueReport) {
@@ -895,7 +956,7 @@ export default function Home() {
           ? `Your next class is ${nextClass.entry.courseCode}, ${nextClass.entry.title}, at ${nextClass.entry.venue} on ${dayNames[nextClass.entry.dayOfWeek]} at ${nextClass.entry.startTime}. Ask for directions to ${nextClass.entry.venue} when you are ready to leave.`
           : signedIn ? "Your timetable is empty. Open My timetable to add a class or import a CSV file." : "Sign in to create a personal timetable with reminders and route suggestions.";
       }
-      setChat((current) => [...current, { from: "ai", text: answer, placeId: responsePlace?.id }]);
+      setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: answer, question: q, placeId: responsePlace?.id, updates: responseUpdates }]);
     }, 450);
   }
 
@@ -928,16 +989,33 @@ export default function Home() {
             const cardMap = cardPlace ? `https://www.openstreetmap.org/export/embed.html?bbox=${cardPlace.lon - 0.002}%2C${cardPlace.lat - 0.0017}%2C${cardPlace.lon + 0.002}%2C${cardPlace.lat + 0.0017}&layer=mapnik&marker=${cardPlace.lat}%2C${cardPlace.lon}` : "";
             return <div key={index} className={`chat-message ${item.from}`}>
               <div className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>
+              {item.updates && <div className="chat-update-cards">{item.updates.map((update) => <a key={update.id} href={update.url} target="_blank" rel="noreferrer">
+                <span>{update.category}</span><b>{update.title}</b>
+                <small>{new Date(update.startDate).toLocaleDateString("en-GH", { day: "numeric", month: "short", year: "numeric" })}{update.endDate !== update.startDate ? ` – ${new Date(update.endDate).toLocaleDateString("en-GH", { day: "numeric", month: "short", year: "numeric" })}` : ""}</small>
+                <p>{update.summary}</p><em>{update.source} ↗</em>
+              </a>)}</div>}
               {cardPlace && <article className="facility-card">
                 <div className="facility-map"><iframe title={`Map preview of ${cardPlace.name}`} src={cardMap} loading="lazy" /></div>
                 <div className="facility-card-body"><div className="facility-title"><span style={{ background: cardPlace.color }}>{cardPlace.icon}</span><div><b>{cardPlace.name}</b><small>{cardPlace.category} · {cardPlace.distance}</small></div></div>
                 <div className="facility-facts"><span><b>Hours / location</b>{cardPlace.hours}</span><span><b>Accessibility</b>{cardPlace.accessible ? "♿ Accessible" : "Not confirmed"}</span><span><b>Contact</b>{placeContact(cardPlace)}</span></div>
                 <div className="facility-actions"><button onClick={() => sendMessage(`${preferences.travelMode === "shuttle" ? "Shuttle" : "Directions"} to ${cardPlace.name}`)}>⌖ {preferences.travelMode === "shuttle" ? "Shuttle route" : "Directions"}</button><button onClick={() => toggleSavedPlace(cardPlace.id)}>{saved.includes(cardPlace.id) ? "♥ Saved" : "♡ Save"}</button><button onClick={() => { setSelected(cardPlace); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Open map</button></div></div>
               </article>}
+              {item.from === "ai" && item.id && item.id !== "welcome" && <div className="answer-feedback">
+                {feedbackGiven[item.id] ? <span>✓ Feedback received</span> : <>
+                  <button onClick={() => submitAiFeedback(item, "helpful")}>👍 Helpful</button>
+                  <button onClick={() => submitAiFeedback(item, "not_helpful")}>👎 Not helpful</button>
+                  <button onClick={() => { setCorrectionTarget(item.id!); setCorrectionText(""); }}>⚑ Report incorrect information</button>
+                </>}
+                {correctionTarget === item.id && !feedbackGiven[item.id] && <div className="correction-form">
+                  <label>What information should be corrected?</label>
+                  <textarea value={correctionText} onChange={(event) => setCorrectionText(event.target.value)} placeholder="Tell us what is incorrect and, if possible, the correct information." />
+                  <div><button onClick={() => setCorrectionTarget(null)}>Cancel</button><button className="send-correction" disabled={correctionText.trim().length < 5} onClick={() => submitAiFeedback(item, "incorrect")}>Send report</button></div>
+                </div>}
+              </div>}
             </div>;
           })}</div>
           <div className="ai-suggestions">
-            {["Shuttle to CALC", "Where is Casfod?", "Find the closest ATM", "Which library is nearest?", "My next class"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
+            {["What UCC events are coming up?", "Examination deadlines", "Latest SRC announcements", "Find the closest ATM", "My next class"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
           </div>
           <div className="chat-input">
             <button className={`voice-button ${listening ? "listening" : ""}`} onClick={startVoiceInput} aria-label="Ask Campus AI by voice" title="Ask by voice">{listening ? "●" : "🎙"}</button>

@@ -48,3 +48,15 @@ export const userPreferences = sqliteTable("user_preferences", {
   visitCounts: text("visit_counts").notNull().default("{}"),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const aiFeedback = sqliteTable("ai_feedback", {
+  id: text("id").primaryKey(),
+  reporterEmail: text("reporter_email"),
+  messageId: text("message_id").notNull(),
+  rating: text("rating").notNull(),
+  question: text("question"),
+  answer: text("answer").notNull(),
+  correction: text("correction"),
+  placeId: integer("place_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
