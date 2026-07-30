@@ -143,7 +143,7 @@ export default function Home() {
   const [panel, setPanel] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [chat, setChat] = useState([
-    { from: "ai", text: "Hi Adwoa! I answer using verified University of Cape Coast information. Where would you like to go?" },
+    { from: "ai", text: "Welcome! I’m getting your UCC Campus AI ready." },
   ]);
   const [message, setMessage] = useState("");
   const [account, setAccount] = useState<Account>({ identity: null, profile: null });
@@ -199,6 +199,7 @@ export default function Home() {
     ? accountName.split("@")[0].split(/[._-]/)[0]
     : accountName.split(/\s+/)[0];
   const firstName = identityFirstName.charAt(0).toUpperCase() + identityFirstName.slice(1);
+  const signedIn = Boolean(account.identity);
   const timeGreeting = welcomeTime.getHours() < 12 ? "Good morning" : welcomeTime.getHours() < 18 ? "Good afternoon" : "Good evening";
   const welcomeDate = new Intl.DateTimeFormat("en-GH", { weekday: "long", month: "long", day: "numeric" }).format(welcomeTime).toUpperCase();
 
@@ -238,6 +239,18 @@ export default function Home() {
   const weatherCondition = weather ? describeWeather(weather.weatherCode, weather.isDay) : null;
 
   useEffect(() => {
+    if (accountLoading) return;
+    setChat((current) => current.length === 1
+      ? [{
+          from: "ai",
+          text: signedIn
+            ? `Hi ${firstName}! I can help with UCC directions, hostels, lecture halls, academic facilities, services, weather${account.profile ? `, and information relevant to your ${account.profile.programme} profile` : ""}. What do you need?`
+            : "Hi! I can help with UCC directions, hostels, lecture halls, academic facilities, services, and current campus weather. Sign in for a personalized experience.",
+        }]
+      : current);
+  }, [accountLoading, signedIn, firstName, account.profile]);
+
+  useEffect(() => {
     if (filtered.length && (query.trim() || category !== "All places")) setSelected(filtered[0]);
   }, [filtered, query, category]);
 
@@ -246,18 +259,56 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 2600);
   }
 
-  function sendMessage() {
-    if (!message.trim()) return;
-    const q = message;
+  function sendMessage(prompt?: string) {
+    const q = (prompt ?? message).trim();
+    if (!q) return;
     setChat((current) => [...current, { from: "user", text: q }]);
     setMessage("");
     window.setTimeout(() => {
       const lower = q.toLowerCase();
-      let answer = "I found a few relevant campus places. Try the directory or tell me the facility name.";
-      if (lower.includes("library")) answer = "Sam Jonah Library is on Northern Campus, opposite the shuttle bus station. Semester hours are Monday–Friday, 9 AM–10 PM.";
-      if (lower.includes("clinic") || lower.includes("health") || lower.includes("hospital")) answer = "UCC University Hospital serves students, staff and the public. Health Services: 03321 32447.";
-      if (lower.includes("atm") || lower.includes("bank")) answer = "ADB Bank & ATM is near the Cafeteria Complex. UCC also has GCB, Prudential and Zenith banking services on campus.";
-      if (lower.includes("emergency") || lower.includes("security")) answer = "UCC emergency lines include 020 300 5175 and 020 300 5176. Call Ghana’s national emergency number 112 for immediate danger.";
+      const compact = lower.replace(/[^a-z0-9]/g, "");
+      const acronymMatch: Record<string, string> = { llt: "Large Lecture Theatre", calc: "C. A. Ackah", nlt: "New Lecture Theatre", swlt: "Sandwich Lecture", ids: "Institute for Development Studies" };
+      const acronymName = Object.entries(acronymMatch).find(([key]) => compact.includes(key))?.[1];
+      const matchedPlace = places
+        .slice()
+        .sort((a, b) => b.name.length - a.name.length)
+        .find((place) => lower.includes(place.name.toLowerCase()) || (acronymName && place.name.includes(acronymName)));
+      const personalLead = signedIn ? `${firstName}, ` : "";
+      let answer = `${personalLead}I can answer questions about ${places.length} mapped UCC places. Try a facility name, “list lecture halls”, “show hostels in Kwaprow”, “campus weather”, or “my profile”.`;
+
+      if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(lower)) {
+        answer = `Hi${signedIn ? ` ${firstName}` : ""}! Ask me for a campus location, a list of hostels or lecture halls, current weather, emergency help, or information about your account.`;
+      } else if (matchedPlace) {
+        setSelected(matchedPlace);
+        answer = `${matchedPlace.name} is in ${matchedPlace.distance}. ${matchedPlace.hours}.${matchedPlace.accessible ? " It is marked as wheelchair accessible." : ""} I’ve selected it on the Explore UCC map so you can open its exact location.`;
+      } else if (lower.includes("weather") || lower.includes("temperature") || lower.includes("rain")) {
+        answer = weather && weatherCondition
+          ? `Current conditions at UCC are ${Math.round(weather.temperature)}°C and ${weatherCondition.label.toLowerCase()}. It feels like ${Math.round(weather.apparentTemperature)}°C, with ${weather.humidity}% humidity and wind around ${Math.round(weather.windSpeed)} km/h.`
+          : "The live UCC weather service is still loading. The current conditions card on the homepage will update automatically.";
+      } else if (lower.includes("hostel")) {
+        const area = ["amamoma", "ayensu", "kwaprow", "northern"].find((item) => lower.includes(item));
+        const hostels = places.filter((place) => place.category === "Hostels" && (!area || place.distance.toLowerCase().includes(area)));
+        answer = `${area ? `I found ${hostels.length} hostels around ${area.charAt(0).toUpperCase() + area.slice(1)}` : `The directory contains ${hostels.length} mapped hostels`}: ${hostels.slice(0, 8).map((place) => place.name).join(", ")}${hostels.length > 8 ? ", and more" : ""}. Select Hostels in Explore UCC to view every result and exact map marker.`;
+      } else if (lower.includes("lecture") || lower.includes("auditorium")) {
+        const halls = places.filter((place) => /lecture|auditorium/i.test(place.name));
+        answer = `Mapped UCC lecture and auditorium facilities include ${halls.map((place) => place.name).join(", ")}. Tell me one name or acronym and I’ll select it on the map.`;
+      } else if (lower.includes("academic") || lower.includes("faculty") || lower.includes("school") || lower.includes("library")) {
+        const academic = places.filter((place) => place.category === "Academic");
+        answer = `Explore UCC currently has ${academic.length} academic facilities, including Sam Jonah Library, LLT, CALC, NLT, the faculties of Science, Arts and Social Sciences, the School of Business, School of Medical Sciences, IDS, and both administration areas. Ask for any one by name.`;
+      } else if (lower.includes("clinic") || lower.includes("health") || lower.includes("hospital")) {
+        answer = "UCC University Hospital is on South Campus and serves students, staff, and the public. Health Services can be reached on 03321 32447. I can also show the hospital on the map.";
+      } else if (lower.includes("atm") || lower.includes("bank")) {
+        answer = "ADB Bank is mapped on Northern Campus along Casford Road. Ask me to show ADB Bank and I’ll select its exact map location.";
+      } else if (lower.includes("emergency") || lower.includes("security") || lower.includes("danger")) {
+        answer = "For campus response, call UCC emergency on 020 300 5175. For immediate danger, call Ghana’s national emergency number 112. You can open the Emergency panel for health and fire contacts.";
+      } else if (lower.includes("profile") || lower.includes("programme") || lower.includes("level") || lower.includes("who am i")) {
+        answer = account.profile
+          ? `You’re signed in as ${account.profile.fullName}, ${account.profile.programme}, Level ${account.profile.level}, with ID ${account.profile.studentId}. I’ll use your first name and programme context when helpful.`
+          : signedIn ? "You’re signed in, but your UCC profile is not complete yet. Open your account menu to add your name, ID, programme, and level." : "You’re currently browsing as a guest. Sign in and complete your UCC profile to personalize Campus AI.";
+      } else if (lower.includes("saved") || lower.includes("favourite") || lower.includes("favorite")) {
+        const savedPlaces = places.filter((place) => saved.includes(place.id));
+        answer = savedPlaces.length ? `You have saved ${savedPlaces.map((place) => place.name).join(", ")}.` : "You have no saved places yet. Use the heart beside a directory result to save it.";
+      }
       setChat((current) => [...current, { from: "ai", text: answer }]);
     }, 450);
   }
@@ -405,9 +456,12 @@ export default function Home() {
         <section className={`modal ${panel === "assistant" ? "chat-modal" : ""}`} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <button className="modal-close" onClick={() => setPanel(null)}>×</button>
           {panel === "assistant" && <>
-            <div className="modal-icon ai">✦</div><h2>UCC Campus AI</h2><p className="modal-subtitle">Answers grounded in verified UCC information</p>
+            <div className="modal-icon ai">✦</div><h2>{signedIn ? `${firstName}’s Campus AI` : "UCC Campus AI"}</h2><p className="modal-subtitle">{account.profile ? `Personalized for ${account.profile.programme} · Level ${account.profile.level}` : "Answers grounded in verified UCC information"}</p>
             <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}</div>)}</div>
-            <div className="chat-input"><input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask about places, hours, or services…" autoFocus /><button onClick={sendMessage}>↑</button></div>
+            <div className="ai-suggestions">
+              {["List lecture halls", "Hostels in Kwaprow", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
+            </div>
+            <div className="chat-input"><input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask about UCC places, facilities, weather, or your profile…" autoFocus /><button onClick={() => sendMessage()}>↑</button></div>
           </>}
           {panel === "emergency" && <>
             <div className="modal-icon emergency">+</div><h2>Emergency help</h2><p className="modal-subtitle">If there is immediate danger, call the appropriate service.</p>
