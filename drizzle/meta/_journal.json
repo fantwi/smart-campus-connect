@@ -15,6 +15,13 @@
       "when": 1785378000000,
       "tag": "0001_personal_timetable",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785387600000,
+      "tag": "0002_issue_reports",
+      "breakpoints": true
     }
   ]
 }

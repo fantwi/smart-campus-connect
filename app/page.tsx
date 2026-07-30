@@ -58,6 +58,15 @@ type TimetableEntry = {
   reminderMinutes: number;
 };
 
+type IssueDraft = {
+  category: "Lighting" | "Water" | "Security" | "Damage" | "Other";
+  description: string;
+  locationText: string;
+  latitude: number | null;
+  longitude: number | null;
+  photo: File | null;
+};
+
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function distanceMeters(from: { lat: number; lon: number }, to: { lat: number; lon: number }) {
@@ -187,6 +196,8 @@ const places: Place[] = [
   { id: 90, name: "Old Site Shuttle Station", category: "Transport", distance: "South Campus", hours: "Near Oguaa and Adehye halls", icon: "↔", color: "#34745d", lat: 5.1054253, lon: -1.2858249, accessible: true },
   { id: 91, name: "Science Shuttle Station", category: "Transport", distance: "Northern Campus", hours: "Opposite Sam Jonah Library", icon: "↔", color: "#356b91", lat: 5.1167122, lon: -1.2922016, accessible: true },
   { id: 92, name: "Valco Shuttle Station", category: "Transport", distance: "Northern Campus", hours: "Near Valco Hall", icon: "↔", color: "#7a5c93", lat: 5.11538, lon: -1.2818592, accessible: true },
+  { id: 93, name: "UCC Police Station", category: "Safety", distance: "South Campus", hours: "Campus security support", icon: "◇", color: "#315f82", lat: 5.1059614, lon: -1.2798723, accessible: true },
+  { id: 94, name: "UCC Fire Service Station", category: "Safety", distance: "South Campus", hours: "Fire and rescue response", icon: "◇", color: "#b64b3f", lat: 5.1055128, lon: -1.2799135, accessible: true },
 ];
 
 const destinationAliases: Record<string, number> = {
@@ -239,7 +250,7 @@ function findDestination(input: string) {
 
 const categories = [
   ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Health", "+"],
-  ["Hostels", "H"], ["Dining", "●"], ["Banking", "₵"], ["Transport", "↔"], ["Recreation", "◉"], ["Landmark", "◆"],
+  ["Hostels", "H"], ["Dining", "●"], ["Banking", "₵"], ["Transport", "↔"], ["Safety", "◇"], ["Recreation", "◉"], ["Landmark", "◆"],
 ];
 
 const quickActions = [
@@ -275,6 +286,8 @@ export default function Home() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [lastReferencedPlace, setLastReferencedPlace] = useState<Place | null>(null);
   const [shuttleDestinationId, setShuttleDestinationId] = useState(57);
+  const [issueDraft, setIssueDraft] = useState<IssueDraft | null>(null);
+  const [issueSubmitting, setIssueSubmitting] = useState(false);
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -611,6 +624,69 @@ export default function Home() {
     }]);
   }
 
+  function useLocationForIssue() {
+    if (!navigator.geolocation || !issueDraft) return;
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      setCurrentLocation({ lat: coords.latitude, lon: coords.longitude });
+      setIssueDraft((draft) => draft ? { ...draft, latitude: coords.latitude, longitude: coords.longitude, locationText: draft.locationText || "Current location shared" } : draft);
+      toast("Current location attached");
+    }, () => toast("Location access was not available"), { enableHighAccuracy: true, timeout: 12000 });
+  }
+
+  async function submitIssue() {
+    if (!issueDraft || issueSubmitting) return;
+    if (!signedIn) {
+      setPanel("profile");
+      return;
+    }
+    if (issueDraft.locationText.trim().length < 2) {
+      setChat((current) => [...current, { from: "ai", text: "Please add the issue location or attach your current location before submitting." }]);
+      return;
+    }
+    setIssueSubmitting(true);
+    const form = new FormData();
+    form.set("category", issueDraft.category);
+    form.set("description", issueDraft.description);
+    form.set("locationText", issueDraft.locationText);
+    if (issueDraft.latitude != null) form.set("latitude", String(issueDraft.latitude));
+    if (issueDraft.longitude != null) form.set("longitude", String(issueDraft.longitude));
+    if (issueDraft.photo) form.set("photo", issueDraft.photo);
+    try {
+      const response = await fetch("/api/issues", { method: "POST", body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Report could not be submitted.");
+      setChat((current) => [...current, { from: "ai", text: `Report ${data.id.slice(0, 8).toUpperCase()} was submitted successfully${data.hasPhoto ? " with your photo" : ""}. Campus support can now review it.` }]);
+      setIssueDraft(null);
+      toast("Issue report submitted");
+    } catch (error) {
+      setChat((current) => [...current, { from: "ai", text: error instanceof Error ? error.message : "Report could not be submitted." }]);
+    } finally {
+      setIssueSubmitting(false);
+    }
+  }
+
+  function shareEmergencyLocation() {
+    if (!navigator.geolocation) {
+      toast("Location sharing is not supported");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      const location = { lat: coords.latitude, lon: coords.longitude };
+      setCurrentLocation(location);
+      const url = `https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lon}#map=18/${location.lat}/${location.lon}`;
+      const text = `I need help. My current location is ${location.lat.toFixed(6)}, ${location.lon.toFixed(6)}. ${url}`;
+      try {
+        if (navigator.share) await navigator.share({ title: "Emergency location", text, url });
+        else {
+          await navigator.clipboard.writeText(text);
+          toast("Emergency location copied");
+        }
+      } catch {
+        toast("Location is ready to share");
+      }
+    }, () => toast("Location access was not available"), { enableHighAccuracy: true, timeout: 12000 });
+  }
+
   function sendMessage(prompt?: string) {
     const q = (prompt ?? message).trim();
     if (!q) return;
@@ -621,6 +697,7 @@ export default function Home() {
       const matchedPlace = findDestination(q);
       const wantsDirections = /\b(direction|directions|route|walk|walking|navigate|get to|how do i get)\b/.test(lower);
       const wantsShuttle = /\b(shuttle|campus bus|bus stop|next bus)\b/.test(lower);
+      const wantsIssueReport = /\b(report|broken|faulty|leak|leaking|no water|security concern|damaged|damage|not working)\b/.test(lower);
       const wantsDuration = /\b(how long|how far|travel time|walking time)\b/.test(lower);
       const discoveryKind: "food" | "atm" | "library" | "hostel" | null =
         /\b(eat|food|restaurant|canteen|cafe)\b/.test(lower) ? "food" :
@@ -631,7 +708,22 @@ export default function Home() {
       const personalLead = signedIn ? `${firstName}, ` : "";
       let answer = `${personalLead}I can answer questions about ${places.length} mapped UCC places. Try a facility name, “list lecture halls”, “show hostels in Kwaprow”, “campus weather”, or “my profile”.`;
 
-      if (wantsShuttle) {
+      if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
+        submitIssue();
+        return;
+      } else if (wantsIssueReport) {
+        if (!signedIn) {
+          answer = "Please sign in before submitting an issue so campus support can associate the report with your account.";
+        } else {
+          const category: IssueDraft["category"] =
+            /\b(light|lamp|dark)\b/.test(lower) ? "Lighting" :
+            /\b(water|leak|pipe|tap)\b/.test(lower) ? "Water" :
+            /\b(security|unsafe|suspicious|threat)\b/.test(lower) ? "Security" :
+            /\b(damage|broken|crack)\b/.test(lower) ? "Damage" : "Other";
+          setIssueDraft({ category, description: q, locationText: matchedPlace?.name ?? "", latitude: null, longitude: null, photo: null });
+          answer = `I’ve started a ${category.toLowerCase()} report${matchedPlace ? ` at ${matchedPlace.name}` : ""}. Add or confirm the location below, optionally attach a photo or your live location, then submit it.`;
+        }
+      } else if (wantsShuttle) {
         if (matchedPlace && matchedPlace.category !== "Transport") {
           const stops = places.filter((place) => place.category === "Transport");
           const bestStop = stops.map((stop) => ({ stop, distance: distanceMeters(stop, matchedPlace) })).sort((a, b) => a.distance - b.distance)[0];
@@ -743,6 +835,9 @@ export default function Home() {
     if (key === "map") {
       setActive("Map");
       document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" });
+    } else if (key === "report") {
+      setPanel("assistant");
+      window.setTimeout(() => sendMessage("I want to report an issue"), 100);
     } else setPanel(key);
   }
 
@@ -753,6 +848,11 @@ export default function Home() {
         <div className="assistant-head-actions"><button className="ai-page-link" onClick={() => setPanel("shuttle")}>↔ Shuttle assistant</button><button className="ai-page-link" onClick={() => setPanel("timetable")}>▦ My timetable</button>{!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}</div>
       </div>
       {contextSuggestions.length > 0 && <div className="context-suggestions">{contextSuggestions.map((suggestion) => <button key={suggestion.title} onClick={() => suggestion.action ? sendMessage(suggestion.action) : undefined}><span>✦</span><div><b>{suggestion.title}</b><small>{suggestion.detail}</small></div>{suggestion.action && <em>→</em>}</button>)}</div>}
+      {issueDraft && <div className="chat-report-draft">
+        <div><span>REPORT DRAFT · {issueDraft.category.toUpperCase()}</span><b>{issueDraft.description}</b></div>
+        <input value={issueDraft.locationText} onChange={(event) => setIssueDraft({ ...issueDraft, locationText: event.target.value })} placeholder="Where is the issue?" aria-label="Issue location" />
+        <div className="report-attachments"><button onClick={useLocationForIssue}>◎ {issueDraft.latitude != null ? "Location attached" : "Attach location"}</button><label>▧ {issueDraft.photo ? issueDraft.photo.name : "Add photo"}<input type="file" accept="image/*" capture="environment" onChange={(event) => setIssueDraft({ ...issueDraft, photo: event.target.files?.[0] ?? null })} /></label><button className="submit-chat-report" onClick={submitIssue} disabled={issueSubmitting}>{issueSubmitting ? "Submitting…" : "Submit report"}</button></div>
+      </div>}
       <div className={`assistant-layout ${route || routeLoading ? "has-route" : ""}`}>
         <div className="assistant-conversation">
           <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
@@ -953,8 +1053,10 @@ export default function Home() {
           </>}
           {panel === "emergency" && <>
             <div className="modal-icon emergency">+</div><h2>Emergency help</h2><p className="modal-subtitle">If there is immediate danger, call the appropriate service.</p>
+            <div className="emergency-instructions"><article><b>Security threat</b><span>Move to a populated area, avoid confrontation, and call campus security.</span></article><article><b>Medical emergency</b><span>Call for help, keep the person still, and follow the operator’s instructions.</span></article><article><b>Fire</b><span>Leave the building, do not use lifts, and move to an open assembly area.</span></article></div>
             <div className="contact-list"><a href="tel:0203005175"><span>◇</span><b>UCC emergency line<small>020 300 5175 · Campus response</small></b><em>Call</em></a><a href="tel:0332132447"><span>+</span><b>UCC Health Services<small>03321 32447 · University Hospital</small></b><em>Call</em></a><a href="tel:0205388648"><span>☎</span><b>UCC Fire Service Unit<small>020 538 8648</small></b><em>Call</em></a><a href="tel:112"><span>☎</span><b>National emergency<small>Police, fire and ambulance</small></b><em>112</em></a></div>
-            <button className="primary-action" onClick={() => toast("Your location is ready to share")}>◎ Capture my current location</button>
+            <button className="primary-action emergency-share" onClick={shareEmergencyLocation}>◎ Share my live emergency location</button>
+            <div className="safe-locations"><b>Nearby safe locations</b>{places.filter((place) => place.category === "Safety" || place.id === 2).map((place) => ({ place, distance: distanceMeters(currentLocation ?? { lat: 5.1054, lon: -1.283 }, place) })).sort((a, b) => a.distance - b.distance).map(({ place, distance }) => <button key={place.id} onClick={() => { setSelected(place); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}><span>{place.icon}</span><div><b>{place.name}</b><small>{distance < 1000 ? `${Math.round(distance)} m away` : `${(distance / 1000).toFixed(1)} km away`} · Show on map</small></div><em>→</em></button>)}</div>
           </>}
           {panel === "report" && <>
             <div className="modal-icon report">!</div><h2>Report an issue</h2><p className="modal-subtitle">Help us keep the campus working well.</p>

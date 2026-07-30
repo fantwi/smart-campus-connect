@@ -25,3 +25,16 @@ export const timetableEntries = sqliteTable("timetable_entries", {
   reminderMinutes: integer("reminder_minutes").notNull().default(20),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const issueReports = sqliteTable("issue_reports", {
+  id: text("id").primaryKey(),
+  reporterEmail: text("reporter_email").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  locationText: text("location_text").notNull(),
+  latitude: text("latitude"),
+  longitude: text("longitude"),
+  photoKey: text("photo_key"),
+  status: text("status").notNull().default("submitted"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
