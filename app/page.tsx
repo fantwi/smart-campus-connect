@@ -46,6 +46,20 @@ type RoutePreview = {
   start: { lat: number; lon: number };
 };
 
+type TimetableEntry = {
+  id: string;
+  courseCode: string;
+  title: string;
+  venue: string;
+  placeId: number | null;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  reminderMinutes: number;
+};
+
+const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 function routeInstruction(step: any) {
   const type = step.maneuver?.type ?? "continue";
   const modifier = step.maneuver?.modifier?.replace("_", " ");
@@ -184,6 +198,9 @@ export default function Home() {
   const [route, setRoute] = useState<RoutePreview | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [listening, setListening] = useState(false);
+  const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
+  const [timetableError, setTimetableError] = useState("");
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -192,6 +209,17 @@ export default function Home() {
       .catch(() => setAccountError("Account details could not be loaded."))
       .finally(() => setAccountLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!account.identity) {
+      setTimetable([]);
+      return;
+    }
+    fetch("/api/timetable", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => setTimetable(data.entries ?? []))
+      .catch(() => setTimetableError("Your timetable could not be loaded."));
+  }, [account.identity]);
 
   useEffect(() => {
     let activeRequest = true;
@@ -259,6 +287,67 @@ export default function Home() {
     toast(account.profile ? "Profile updated" : "Your UCC Connect account is ready");
   }
 
+  async function saveTimetableEntries(entries: Omit<TimetableEntry, "id">[]) {
+    setTimetableError("");
+    const response = await fetch("/api/timetable", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setTimetableError(data.error ?? "Timetable could not be saved.");
+      return false;
+    }
+    setTimetable(data.entries ?? []);
+    toast(entries.length > 1 ? `${entries.length} classes imported` : "Class added to your timetable");
+    return true;
+  }
+
+  async function addTimetableEntry(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const venue = String(form.get("venue") ?? "");
+    const matchedVenue = places.find((place) => place.name === venue);
+    const saved = await saveTimetableEntries([{
+      courseCode: String(form.get("courseCode") ?? ""),
+      title: String(form.get("title") ?? ""),
+      venue,
+      placeId: matchedVenue?.id ?? null,
+      dayOfWeek: Number(form.get("dayOfWeek")),
+      startTime: String(form.get("startTime") ?? ""),
+      endTime: String(form.get("endTime") ?? ""),
+      reminderMinutes: Number(form.get("reminderMinutes") ?? 20),
+    }]);
+    if (saved) event.currentTarget.reset();
+  }
+
+  async function deleteTimetableEntry(id: string) {
+    const response = await fetch(`/api/timetable?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const data = await response.json();
+    if (response.ok) {
+      setTimetable(data.entries ?? []);
+      toast("Class removed");
+    }
+  }
+
+  async function importTimetable(file: File) {
+    const text = await file.text();
+    const rows = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const dataRows = rows[0]?.toLowerCase().includes("course") ? rows.slice(1) : rows;
+    const entries = dataRows.map((line) => {
+      const [courseCode, title, day, startTime, endTime, venue, reminder = "20"] = line.split(",").map((value) => value.trim());
+      const dayOfWeek = dayNames.findIndex((name) => name.toLowerCase().startsWith(day?.toLowerCase()));
+      const matchedVenue = places.find((place) => place.name.toLowerCase() === venue?.toLowerCase());
+      return { courseCode, title, venue, placeId: matchedVenue?.id ?? null, dayOfWeek, startTime, endTime, reminderMinutes: Number(reminder) };
+    }).filter((entry) => entry.courseCode && entry.title && entry.venue && entry.dayOfWeek >= 0);
+    if (!entries.length) {
+      setTimetableError("No valid classes were found. Use: course,title,day,start,end,venue,reminder");
+      return;
+    }
+    await saveTimetableEntries(entries);
+  }
+
   const filtered = useMemo(() => places.filter((place) => {
     const matchesCategory = category === "All places" || place.category === category;
     const matchesQuery = `${place.name} ${place.category} ${place.distance} ${place.hours}`.toLowerCase().includes(query.toLowerCase());
@@ -283,6 +372,43 @@ export default function Home() {
       mapUrl: `https://www.openstreetmap.org/export/embed.html?bbox=${minLon}%2C${minLat}%2C${maxLon}%2C${maxLat}&layer=mapnik`,
     };
   }, [route]);
+  const nextClass = useMemo(() => {
+    const now = new Date();
+    const candidates = timetable.map((entry) => {
+      const [hours, minutes] = entry.startTime.split(":").map(Number);
+      const start = new Date(now);
+      let dayOffset = (entry.dayOfWeek - now.getDay() + 7) % 7;
+      start.setDate(now.getDate() + dayOffset);
+      start.setHours(hours, minutes, 0, 0);
+      if (start.getTime() <= now.getTime()) {
+        dayOffset += 7;
+        start.setDate(start.getDate() + 7);
+      }
+      return { entry, start, minutesAway: Math.round((start.getTime() - now.getTime()) / 60000) };
+    });
+    return candidates.sort((a, b) => a.start.getTime() - b.start.getTime())[0] ?? null;
+  }, [timetable, welcomeTime]);
+  const contextSuggestions = useMemo(() => {
+    const suggestions: { title: string; detail: string; action?: string }[] = [];
+    if (nextClass) {
+      const when = nextClass.minutesAway < 120 ? `in ${nextClass.minutesAway} minutes` : `${dayNames[nextClass.entry.dayOfWeek]} at ${nextClass.entry.startTime}`;
+      suggestions.push({ title: `${nextClass.entry.courseCode} begins ${when}`, detail: `${nextClass.entry.title} · ${nextClass.entry.venue}`, action: `Directions to ${nextClass.entry.venue}` });
+      const venue = places.find((place) => place.id === nextClass.entry.placeId);
+      if (venue && currentLocation && nextClass.minutesAway < 180) {
+        const distanceKm = Math.hypot((venue.lat - currentLocation.lat) * 111, (venue.lon - currentLocation.lon) * 110.5);
+        const walkingMinutes = Math.max(2, Math.round(distanceKm / 4.8 * 60));
+        const leaveIn = nextClass.minutesAway - walkingMinutes - 5;
+        suggestions.push({ title: leaveIn <= 0 ? "Leave now to arrive on time" : `Leave in about ${leaveIn} minutes`, detail: `Estimated ${walkingMinutes}-minute walk to ${venue.name}`, action: `Directions to ${venue.name}` });
+      }
+    }
+    if (weather && [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99].includes(weather.weatherCode)) {
+      suggestions.push({ title: "Wet weather on campus", detail: "Consider an umbrella or campus shuttle before your next class." });
+    } else if (weather && weather.temperature >= 30) {
+      suggestions.push({ title: "It is hot on campus", detail: "Carry water and allow time for a shaded walking route." });
+    }
+    if (account.profile && !timetable.length) suggestions.push({ title: `Set up your Level ${account.profile.level} timetable`, detail: `Add ${account.profile.programme} classes for reminders and departure guidance.` });
+    return suggestions.slice(0, 3);
+  }, [nextClass, currentLocation, weather, account.profile, timetable.length]);
 
   useEffect(() => {
     if (accountLoading) return;
@@ -416,6 +542,7 @@ export default function Home() {
         setChat((current) => [...current, { from: "ai", text: `I found ${matchedPlace.name}. Allow location access and I’ll create a walking route from where you are now.` }]);
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => {
+            setCurrentLocation({ lat: coords.latitude, lon: coords.longitude });
             loadWalkingRoute(coords.latitude, coords.longitude, matchedPlace);
           },
           (error) => {
@@ -459,6 +586,10 @@ export default function Home() {
       } else if (lower.includes("saved") || lower.includes("favourite") || lower.includes("favorite")) {
         const savedPlaces = places.filter((place) => saved.includes(place.id));
         answer = savedPlaces.length ? `You have saved ${savedPlaces.map((place) => place.name).join(", ")}.` : "You have no saved places yet. Use the heart beside a directory result to save it.";
+      } else if (lower.includes("timetable") || lower.includes("next class") || lower.includes("lecture today")) {
+        answer = nextClass
+          ? `Your next class is ${nextClass.entry.courseCode}, ${nextClass.entry.title}, at ${nextClass.entry.venue} on ${dayNames[nextClass.entry.dayOfWeek]} at ${nextClass.entry.startTime}. Ask for directions to ${nextClass.entry.venue} when you are ready to leave.`
+          : signedIn ? "Your timetable is empty. Open My timetable to add a class or import a CSV file." : "Sign in to create a personal timetable with reminders and route suggestions.";
       }
       setChat((current) => [...current, { from: "ai", text: answer }]);
     }, 450);
@@ -475,13 +606,14 @@ export default function Home() {
     return <>
       <div className="assistant-heading">
         <div><div className="modal-icon ai">✦</div><h2>{signedIn ? `${firstName}’s Campus AI` : "UCC Campus AI"}</h2><p className="modal-subtitle">{account.profile ? `Personalized for ${account.profile.programme} · Level ${account.profile.level}` : "Answers grounded in verified UCC information"}</p></div>
-        {!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}
+        <div className="assistant-head-actions"><button className="ai-page-link" onClick={() => setPanel("timetable")}>▦ My timetable</button>{!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}</div>
       </div>
+      {contextSuggestions.length > 0 && <div className="context-suggestions">{contextSuggestions.map((suggestion) => <button key={suggestion.title} onClick={() => suggestion.action ? sendMessage(suggestion.action) : undefined}><span>✦</span><div><b>{suggestion.title}</b><small>{suggestion.detail}</small></div>{suggestion.action && <em>→</em>}</button>)}</div>}
       <div className={`assistant-layout ${route || routeLoading ? "has-route" : ""}`}>
         <div className="assistant-conversation">
           <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
           <div className="ai-suggestions">
-            {["Directions to LLT", "List lecture halls", "Hostels in Kwaprow", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
+            {["My next class", "Directions to LLT", "List lecture halls", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
           </div>
           <div className="chat-input">
             <button className={`voice-button ${listening ? "listening" : ""}`} onClick={startVoiceInput} aria-label="Ask Campus AI by voice" title="Ask by voice">{listening ? "●" : "🎙"}</button>
@@ -577,7 +709,7 @@ export default function Home() {
         <section className="explore" id="explore">
           <div className="explore-head">
             <div><span>EXPLORE UCC</span><h2>Find your way around campus</h2></div>
-            <button className="location-button" onClick={() => navigator.geolocation ? navigator.geolocation.getCurrentPosition(() => toast("Location updated"), () => toast("Location access was not available")) : toast("Geolocation is not supported")}>◎ Use my location</button>
+            <button className="location-button" onClick={() => navigator.geolocation ? navigator.geolocation.getCurrentPosition(({ coords }) => { setCurrentLocation({ lat: coords.latitude, lon: coords.longitude }); toast("Location updated"); }, () => toast("Location access was not available")) : toast("Geolocation is not supported")}>◎ Use my location</button>
           </div>
           <div className="category-row">
             {categories.map(([name, icon]) => <button key={name} className={category === name ? "selected" : ""} onClick={() => setCategory(name)}><i>{icon}</i>{name}</button>)}
@@ -647,6 +779,23 @@ export default function Home() {
         <section className={`modal ${panel === "assistant" ? "chat-modal" : ""}`} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <button className="modal-close" onClick={() => setPanel(null)}>×</button>
           {panel === "assistant" && renderAssistant(false)}
+          {panel === "timetable" && !signedIn && <>
+            <div className="modal-icon ai">▦</div><h2>My timetable</h2><p className="modal-subtitle">Sign in to save classes, import your schedule, and receive personalized reminders.</p>
+            <a className="primary-action action-link" href="/signin-with-chatgpt?return_to=%2F">Sign in to create a timetable</a>
+          </>}
+          {panel === "timetable" && signedIn && <>
+            <div className="modal-icon ai">▦</div><h2>My timetable</h2><p className="modal-subtitle">Campus AI uses your schedule for class reminders, departure times, and directions.</p>
+            <form className="timetable-form" onSubmit={addTimetableEntry}>
+              <div className="form-row"><label>Course code<input name="courseCode" required placeholder="CSC 201" /></label><label>Class title<input name="title" required placeholder="Data Structures" /></label></div>
+              <label>Mapped venue<select name="venue" required defaultValue=""><option value="" disabled>Select a UCC facility</option>{places.filter((place) => place.category === "Academic").map((place) => <option key={place.id}>{place.name}</option>)}</select></label>
+              <div className="form-row"><label>Day<select name="dayOfWeek" defaultValue="1">{dayNames.map((day, index) => <option value={index} key={day}>{day}</option>)}</select></label><label>Reminder<select name="reminderMinutes" defaultValue="20"><option value="10">10 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label></div>
+              <div className="form-row"><label>Starts<input type="time" name="startTime" required /></label><label>Ends<input type="time" name="endTime" required /></label></div>
+              <button className="primary-action" type="submit">Add class</button>
+            </form>
+            <label className="csv-import">Import CSV timetable<input type="file" accept=".csv,text/csv" onChange={(event) => event.target.files?.[0] && importTimetable(event.target.files[0])} /><small>Columns: course, title, day, start, end, venue, reminder</small></label>
+            {timetableError && <p className="form-error">{timetableError}</p>}
+            <div className="timetable-list">{timetable.map((entry) => <article key={entry.id}><time><b>{entry.startTime}</b><small>{dayNames[entry.dayOfWeek].slice(0, 3)}</small></time><div><b>{entry.courseCode} · {entry.title}</b><span>{entry.venue} · until {entry.endTime}</span></div><button onClick={() => deleteTimetableEntry(entry.id)} aria-label={`Remove ${entry.courseCode}`}>×</button></article>)}{!timetable.length && <div className="empty">No classes yet. Add one above or import a CSV timetable.</div>}</div>
+          </>}
           {panel === "emergency" && <>
             <div className="modal-icon emergency">+</div><h2>Emergency help</h2><p className="modal-subtitle">If there is immediate danger, call the appropriate service.</p>
             <div className="contact-list"><a href="tel:0203005175"><span>◇</span><b>UCC emergency line<small>020 300 5175 · Campus response</small></b><em>Call</em></a><a href="tel:0332132447"><span>+</span><b>UCC Health Services<small>03321 32447 · University Hospital</small></b><em>Call</em></a><a href="tel:0205388648"><span>☎</span><b>UCC Fire Service Unit<small>020 538 8648</small></b><em>Call</em></a><a href="tel:112"><span>☎</span><b>National emergency<small>Police, fire and ambulance</small></b><em>112</em></a></div>

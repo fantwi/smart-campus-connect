@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const profiles = sqliteTable("profiles", {
   id: text("id").primaryKey(),
@@ -10,4 +10,18 @@ export const profiles = sqliteTable("profiles", {
   level: text("level").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const timetableEntries = sqliteTable("timetable_entries", {
+  id: text("id").primaryKey(),
+  profileEmail: text("profile_email").notNull(),
+  courseCode: text("course_code").notNull(),
+  title: text("title").notNull(),
+  venue: text("venue").notNull(),
+  placeId: integer("place_id"),
+  dayOfWeek: integer("day_of_week").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  reminderMinutes: integer("reminder_minutes").notNull().default(20),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
