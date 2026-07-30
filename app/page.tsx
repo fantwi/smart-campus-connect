@@ -90,6 +90,27 @@ type UserPreferences = {
   visitCounts: Record<string, number>;
 };
 
+type Language = "en" | "fat" | "tw" | "gaa" | "ee";
+
+const languageOptions: { code: Language; label: string; speech: string }[] = [
+  { code: "en", label: "English", speech: "en-GH" },
+  { code: "fat", label: "Fante", speech: "ak-GH" },
+  { code: "tw", label: "Twi", speech: "ak-GH" },
+  { code: "gaa", label: "Ga", speech: "gaa-GH" },
+  { code: "ee", label: "Ewe", speech: "ee-GH" },
+];
+
+const languageCopy: Record<Language, {
+  welcome: string; help: string; ask: string; listening: string; helpful: string; notHelpful: string;
+  incorrect: string; received: string; correction: string; cancel: string; send: string; answerLead: string;
+}> = {
+  en: { welcome: "Welcome to UCC Campus Connect.", help: "What can we help you find today?", ask: "Ask about a place, event, or request directions…", listening: "Listening…", helpful: "Helpful", notHelpful: "Not helpful", incorrect: "Report incorrect information", received: "Feedback received", correction: "What information should be corrected?", cancel: "Cancel", send: "Send report", answerLead: "" },
+  fat: { welcome: "Akwaaba UCC Campus Connect.", help: "Ebɛn adze na yebotum aboa wo ma aahwehwɛ ndɛ?", ask: "Bisa beebi, dwumadzi anaa kwan ho asɛm…", listening: "Yeretsie wo…", helpful: "Ɔboa me", notHelpful: "Ɔmboa me", incorrect: "Bɔ amandzɛɛ wɔ nsɛm a wɔnntɔ da ho", received: "Yɛagye w’adwenkyerɛ", correction: "Ebɛn asɛm na ɔsɛ dɛ wɔtsen no?", cancel: "Gyae", send: "Fa amandzɛɛ no kɔ", answerLead: "UCC ho mbuae no nye yi:" },
+  tw: { welcome: "Akwaaba UCC Campus Connect.", help: "Dɛn na yebetumi aboa wo ahwehwɛ nnɛ?", ask: "Bisa beae, dwumadi anaa akwankyerɛ ho asɛm…", listening: "Yɛretie wo…", helpful: "Ɛboa me", notHelpful: "Ɛmmoa me", incorrect: "Bɔ amanneɛ sɛ asɛm no nyɛ nokware", received: "Yɛanya w’adwenkyerɛ", correction: "Asɛm bɛn na ɛsɛ sɛ yɛsiesie?", cancel: "Twa mu", send: "Fa amanneɛ no kɔ", answerLead: "UCC ho mmuae no ni:" },
+  gaa: { welcome: "Ojekoo, UCC Campus Connect.", help: "Mɛni ji obaanyɛ bo ni?", ask: "Bí niŋ be, shikpon alo lɛlɛŋkwɛi he…", listening: "Míitsɔ bo…", helpful: "Eboa mi", notHelpful: "Eboa mi ko", incorrect: "Kɛ sane ni efee jogbaŋŋ amaneɛ", received: "Míshɛ bo sane", correction: "Sane mɛni ji ebaahiɛ shishi?", cancel: "Gbo", send: "Kɛ amaneɛ no kɔ", answerLead: "UCC sane no ji nɛ:" },
+  ee: { welcome: "Woezɔ UCC Campus Connect.", help: "Nu ka míate ŋu akpe ɖe ŋuwò le egbe?", ask: "Bia teƒe, nudzɔdzɔ alo mɔfiame ŋu…", listening: "Míele to ɖom…", helpful: "Eɖe ŋunye", notHelpful: "Mede ŋunye o", incorrect: "Gblɔ be nyatakaka la mesɔ o", received: "Míexɔ wò susu", correction: "Nyatakaka kae wòle be woatrɔ?", cancel: "Tsi", send: "Ɖo nyatakaka la ɖa", answerLead: "UCC ŋu ŋuɖoɖo lae nye esi:" },
+};
+
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function distanceMeters(from: { lat: number; lon: number }, to: { lat: number; lon: number }) {
@@ -327,6 +348,18 @@ export default function Home() {
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({});
   const [correctionTarget, setCorrectionTarget] = useState<string | null>(null);
   const [correctionText, setCorrectionText] = useState("");
+  const [language, setLanguage] = useState<Language>("en");
+  const lc = languageCopy[language];
+
+  useEffect(() => {
+    const savedLanguage = window.localStorage.getItem("ucc-language") as Language | null;
+    if (savedLanguage && languageOptions.some((item) => item.code === savedLanguage)) setLanguage(savedLanguage);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("ucc-language", language);
+    document.documentElement.lang = language === "fat" || language === "tw" ? "ak" : language;
+  }, [language]);
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -661,7 +694,7 @@ export default function Home() {
       return;
     }
     const recognition = new SpeechRecognition();
-    recognition.lang = "en-GH";
+    recognition.lang = languageOptions.find((item) => item.code === language)?.speech ?? "en-GH";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => setListening(true);
@@ -686,7 +719,7 @@ export default function Home() {
     window.speechSynthesis.cancel();
     const text = `Walking directions to ${route.destination.name}. ${route.steps.map((step) => `${step.instruction}.`).join(" ")}`;
     const speech = new SpeechSynthesisUtterance(text);
-    speech.lang = "en-GH";
+    speech.lang = languageOptions.find((item) => item.code === language)?.speech ?? "en-GH";
     speech.rate = 0.92;
     window.speechSynthesis.speak(speech);
   }
@@ -956,7 +989,7 @@ export default function Home() {
           ? `Your next class is ${nextClass.entry.courseCode}, ${nextClass.entry.title}, at ${nextClass.entry.venue} on ${dayNames[nextClass.entry.dayOfWeek]} at ${nextClass.entry.startTime}. Ask for directions to ${nextClass.entry.venue} when you are ready to leave.`
           : signedIn ? "Your timetable is empty. Open My timetable to add a class or import a CSV file." : "Sign in to create a personal timetable with reminders and route suggestions.";
       }
-      setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: answer, question: q, placeId: responsePlace?.id, updates: responseUpdates }]);
+      setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: lc.answerLead ? `${lc.answerLead}\n${answer}` : answer, question: q, placeId: responsePlace?.id, updates: responseUpdates }]);
     }, 450);
   }
 
@@ -974,7 +1007,7 @@ export default function Home() {
     return <>
       <div className="assistant-heading">
         <div><div className="modal-icon ai">✦</div><h2>{signedIn ? `${firstName}’s Campus AI` : "UCC Campus AI"}</h2><p className="modal-subtitle">{account.profile ? `Personalized for ${account.profile.programme} · Level ${account.profile.level}` : "Answers grounded in verified UCC information"}</p></div>
-        <div className="assistant-head-actions"><button className="ai-page-link" onClick={() => setPanel("shuttle")}>↔ Shuttle assistant</button><button className="ai-page-link" onClick={() => setPanel("timetable")}>▦ My timetable</button>{!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}</div>
+        <div className="assistant-head-actions"><label className="language-picker"><span>Language</span><select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>{languageOptions.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></label><button className="ai-page-link" onClick={() => setPanel("shuttle")}>↔ Shuttle assistant</button><button className="ai-page-link" onClick={() => setPanel("timetable")}>▦ My timetable</button>{!fullPage && <button className="ai-page-link" onClick={() => setPanel("assistant-page")}>Open full page ↗</button>}</div>
       </div>
       {contextSuggestions.length > 0 && <div className="context-suggestions">{contextSuggestions.map((suggestion) => <button key={suggestion.title} onClick={() => suggestion.action ? sendMessage(suggestion.action) : undefined}><span>✦</span><div><b>{suggestion.title}</b><small>{suggestion.detail}</small></div>{suggestion.action && <em>→</em>}</button>)}</div>}
       {issueDraft && <div className="chat-report-draft">
@@ -1001,15 +1034,15 @@ export default function Home() {
                 <div className="facility-actions"><button onClick={() => sendMessage(`${preferences.travelMode === "shuttle" ? "Shuttle" : "Directions"} to ${cardPlace.name}`)}>⌖ {preferences.travelMode === "shuttle" ? "Shuttle route" : "Directions"}</button><button onClick={() => toggleSavedPlace(cardPlace.id)}>{saved.includes(cardPlace.id) ? "♥ Saved" : "♡ Save"}</button><button onClick={() => { setSelected(cardPlace); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Open map</button></div></div>
               </article>}
               {item.from === "ai" && item.id && item.id !== "welcome" && <div className="answer-feedback">
-                {feedbackGiven[item.id] ? <span>✓ Feedback received</span> : <>
-                  <button onClick={() => submitAiFeedback(item, "helpful")}>👍 Helpful</button>
-                  <button onClick={() => submitAiFeedback(item, "not_helpful")}>👎 Not helpful</button>
-                  <button onClick={() => { setCorrectionTarget(item.id!); setCorrectionText(""); }}>⚑ Report incorrect information</button>
+                {feedbackGiven[item.id] ? <span>✓ {lc.received}</span> : <>
+                  <button onClick={() => submitAiFeedback(item, "helpful")}>👍 {lc.helpful}</button>
+                  <button onClick={() => submitAiFeedback(item, "not_helpful")}>👎 {lc.notHelpful}</button>
+                  <button onClick={() => { setCorrectionTarget(item.id!); setCorrectionText(""); }}>⚑ {lc.incorrect}</button>
                 </>}
                 {correctionTarget === item.id && !feedbackGiven[item.id] && <div className="correction-form">
-                  <label>What information should be corrected?</label>
+                  <label>{lc.correction}</label>
                   <textarea value={correctionText} onChange={(event) => setCorrectionText(event.target.value)} placeholder="Tell us what is incorrect and, if possible, the correct information." />
-                  <div><button onClick={() => setCorrectionTarget(null)}>Cancel</button><button className="send-correction" disabled={correctionText.trim().length < 5} onClick={() => submitAiFeedback(item, "incorrect")}>Send report</button></div>
+                  <div><button onClick={() => setCorrectionTarget(null)}>{lc.cancel}</button><button className="send-correction" disabled={correctionText.trim().length < 5} onClick={() => submitAiFeedback(item, "incorrect")}>{lc.send}</button></div>
                 </div>}
               </div>}
             </div>;
@@ -1019,7 +1052,7 @@ export default function Home() {
           </div>
           <div className="chat-input">
             <button className={`voice-button ${listening ? "listening" : ""}`} onClick={startVoiceInput} aria-label="Ask Campus AI by voice" title="Ask by voice">{listening ? "●" : "🎙"}</button>
-            <input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder={listening ? "Listening…" : "Ask about a place or request directions…"} autoFocus />
+            <input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder={listening ? lc.listening : lc.ask} autoFocus />
             <button onClick={() => sendMessage()} aria-label="Send message">↑</button>
           </div>
         </div>
@@ -1057,6 +1090,7 @@ export default function Home() {
           ))}
         </nav>
         <div className="header-actions">
+          <label className="header-language"><span>Language</span><select value={language} onChange={(event) => setLanguage(event.target.value as Language)} aria-label="Choose language">{languageOptions.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></label>
           <button className="icon-button" aria-label="Notifications" onClick={() => toast("You’re all caught up")}>♢<b>3</b></button>
           <button className="profile" onClick={() => setPanel("profile")} disabled={accountLoading}><span>{accountInitials}</span><em>{accountLoading ? "Loading…" : accountName}<small>{account.profile ? `${account.profile.level} · ${account.profile.studentId}` : account.identity ? "Complete your UCC profile" : "Sign in to continue"}</small></em><i>⌄</i></button>
         </div>
@@ -1066,8 +1100,8 @@ export default function Home() {
         <section className="hero">
           <div className="hero-copy">
             <span className="eyebrow"><i /> {welcomeDate}</span>
-            <h1>{accountLoading ? "Welcome to UCC." : account.identity ? `${timeGreeting}, ${firstName}.` : "Welcome to UCC Campus Connect."}</h1>
-            <p>{accountLoading ? "Getting your campus ready…" : account.profile ? `What can we help you find today, ${firstName}?` : account.identity ? "Complete your profile to personalize your campus experience." : "Explore the University of Cape Coast or sign in to personalize your experience."}</p>
+            <h1>{account.identity ? `${lc.welcome} ${firstName}.` : lc.welcome}</h1>
+            <p>{account.profile ? `${lc.help} ${firstName}?` : lc.help}</p>
             <div className="global-search">
               <span>⌕</span>
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search UCC halls, faculties, services…" aria-label="Search UCC campus" />
