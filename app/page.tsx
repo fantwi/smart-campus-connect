@@ -21,19 +21,18 @@ type Account = {
 };
 
 const places: Place[] = [
-  { id: 1, name: "Sam Jonah Library", category: "Academic", distance: "4 min", hours: "Open until 10 PM", icon: "▤", color: "#003b73", lat: 5.1159, lon: -1.2833, accessible: true },
-  { id: 2, name: "UCC University Hospital", category: "Health", distance: "8 min", hours: "Emergency care available", icon: "+", color: "#c43d38", lat: 5.0999, lon: -1.2797, accessible: true },
-  { id: 3, name: "Casford Cafeteria", category: "Food & dining", distance: "5 min", hours: "Northern Campus", icon: "◒", color: "#d79b13", lat: 5.1142, lon: -1.2817 },
-  { id: 4, name: "Central Administration", category: "Administration", distance: "9 min", hours: "South Campus", icon: "▥", color: "#315fa8", lat: 5.1039, lon: -1.2844, accessible: true },
-  { id: 5, name: "UCC Security Control", category: "Security", distance: "3 min", hours: "Open 24 hours", icon: "◇", color: "#62499a", lat: 5.1081, lon: -1.2862 },
-  { id: 6, name: "ADB Bank & ATM", category: "Banking", distance: "6 min", hours: "Near Cafeteria Complex", icon: "₵", color: "#158b83", lat: 5.1131, lon: -1.2809 },
-  { id: 7, name: "Kwame Nkrumah Hall", category: "Accommodation", distance: "7 min", hours: "Northern Campus", icon: "▦", color: "#8b6237", lat: 5.1167, lon: -1.2862 },
-  { id: 8, name: "Science Building Complex", category: "Academic", distance: "6 min", hours: "Network & Infrastructure", icon: "⌬", color: "#2f6ca5", lat: 5.1117, lon: -1.2778, accessible: true },
+  { id: 1, name: "Sam Jonah Library", category: "Academic", distance: "4 min", hours: "Open until 10 PM", icon: "▤", color: "#003b73", lat: 5.1164881, lon: -1.2909118, accessible: true },
+  { id: 2, name: "University Hospital", category: "Health", distance: "8 min", hours: "Emergency care available", icon: "+", color: "#c43d38", lat: 5.1051584, lon: -1.2828135, accessible: true },
+  { id: 3, name: "Casely Hayford Hall", category: "Accommodation", distance: "5 min", hours: "Casford Road", icon: "▦", color: "#d79b13", lat: 5.1167009, lon: -1.2842355 },
+  { id: 4, name: "Atlantic Hall", category: "Accommodation", distance: "9 min", hours: "School Bus Road", icon: "▦", color: "#315fa8", lat: 5.105658, lon: -1.2868962, accessible: true },
+  { id: 5, name: "Valco Hall", category: "Accommodation", distance: "6 min", hours: "University Avenue", icon: "▦", color: "#62499a", lat: 5.1158808, lon: -1.2824973 },
+  { id: 6, name: "ADB Bank", category: "Banking", distance: "6 min", hours: "Casford Road", icon: "₵", color: "#158b83", lat: 5.1176325, lon: -1.2856637 },
+  { id: 7, name: "Kwame Nkrumah Hall", category: "Accommodation", distance: "7 min", hours: "University Avenue", icon: "▦", color: "#8b6237", lat: 5.1162601, lon: -1.2805715 },
+  { id: 8, name: "Science Annex Building", category: "Academic", distance: "6 min", hours: "Ayensu Road", icon: "⌬", color: "#2f6ca5", lat: 5.1150602, lon: -1.2941921, accessible: true },
 ];
 
 const categories = [
-  ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Food & dining", "◒"],
-  ["Health", "+"], ["Banking", "₵"], ["Security", "◇"],
+  ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Health", "+"], ["Banking", "₵"],
 ];
 
 const quickActions = [
