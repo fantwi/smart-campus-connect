@@ -76,6 +76,28 @@ const places: Place[] = [
   { id: 53, name: "Efrat Heights", category: "Hostels", distance: "UCC environs", hours: "Cape Coast", icon: "H", color: "#776348", lat: 5.1323883, lon: -1.2821497 },
   { id: 54, name: "Medical Hall", category: "Hostels", distance: "UCC environs", hours: "Near Cape Coast Teaching Hospital", icon: "H", color: "#3b817c", lat: 5.1343974, lon: -1.2844258 },
   { id: 55, name: "SRC Hall", category: "Hostels", distance: "UCC environs", hours: "Arku Korsah Road", icon: "H", color: "#665797", lat: 5.1339941, lon: -1.287187 },
+  { id: 56, name: "Large Lecture Theatre (LLT)", category: "Academic", distance: "Northern Campus", hours: "University Avenue", icon: "▤", color: "#0c5f91", lat: 5.1170421, lon: -1.2914191, accessible: true },
+  { id: 57, name: "C. A. Ackah Lecture Theatre (CALC)", category: "Academic", distance: "Northern Campus", hours: "Near Auditorium 900", icon: "▤", color: "#315fa8", lat: 5.1195187, lon: -1.2923444 },
+  { id: 58, name: "New Lecture Theatre (NLT)", category: "Academic", distance: "Northern Campus", hours: "Near College of Distance Education", icon: "▤", color: "#3a759b", lat: 5.1220862, lon: -1.2958289 },
+  { id: 59, name: "Sandwich Lecture Theatre (SWLT)", category: "Academic", distance: "Northern Campus", hours: "West of Science", icon: "▤", color: "#5767a0", lat: 5.1178214, lon: -1.2983329 },
+  { id: 60, name: "Auditorium 900", category: "Academic", distance: "Northern Campus", hours: "Near CALC", icon: "▤", color: "#73569a", lat: 5.1194249, lon: -1.2920655 },
+  { id: 61, name: "UCC Main Auditorium", category: "Academic", distance: "Northern Campus", hours: "Science area", icon: "▤", color: "#8b6145", lat: 5.1166907, lon: -1.2939274 },
+  { id: 62, name: "Faculty of Science", category: "Academic", distance: "Northern Campus", hours: "Science area", icon: "⌬", color: "#247c83", lat: 5.1164652, lon: -1.2937136 },
+  { id: 63, name: "Faculty of Arts", category: "Academic", distance: "Northern Campus", hours: "Near LLT", icon: "⌬", color: "#426f9e", lat: 5.1180834, lon: -1.2926961 },
+  { id: 64, name: "Faculty of Social Sciences", category: "Academic", distance: "Northern Campus", hours: "Near LLT", icon: "⌬", color: "#65589a", lat: 5.1174379, lon: -1.2928106 },
+  { id: 65, name: "School of Business", category: "Academic", distance: "Northern Campus", hours: "Near College of Distance Education", icon: "⌬", color: "#916149", lat: 5.1208275, lon: -1.2948876 },
+  { id: 66, name: "School of Medical Sciences", category: "Academic", distance: "Northern Campus", hours: "Medical School area", icon: "⌬", color: "#287c72", lat: 5.1201942, lon: -1.2938951, accessible: true },
+  { id: 67, name: "School of Medical Sciences Auditorium", category: "Academic", distance: "Northern Campus", hours: "Medical School area", icon: "▤", color: "#3b73a0", lat: 5.1199532, lon: -1.2938228 },
+  { id: 68, name: "School of Graduate Studies", category: "Academic", distance: "Northern Campus", hours: "West of Medical School", icon: "⌬", color: "#6b5797", lat: 5.1206405, lon: -1.2959177 },
+  { id: 69, name: "College of Distance Education", category: "Academic", distance: "Northern Campus", hours: "Near NLT", icon: "⌬", color: "#95584d", lat: 5.122052, lon: -1.2947843 },
+  { id: 70, name: "College of Education", category: "Academic", distance: "Northern Campus", hours: "Near CALC", icon: "⌬", color: "#397c82", lat: 5.1194205, lon: -1.2932987 },
+  { id: 71, name: "Amissah-Arthur Language Centre", category: "Academic", distance: "Northern Campus", hours: "West of College of Education", icon: "⌬", color: "#4c6fa0", lat: 5.1191598, lon: -1.2947993 },
+  { id: 72, name: "Institute for Development Studies (IDS)", category: "Academic", distance: "Northern Campus", hours: "Near Sam Jonah Library", icon: "⌬", color: "#705b91", lat: 5.1179053, lon: -1.291278 },
+  { id: 73, name: "IDS Library", category: "Academic", distance: "Northern Campus", hours: "Institute for Development Studies", icon: "▤", color: "#8d6843", lat: 5.117857, lon: -1.2908862 },
+  { id: 74, name: "New Central Administration Block", category: "Academic", distance: "Northern Campus", hours: "Near Sam Jonah Library", icon: "⌬", color: "#337b76", lat: 5.1154438, lon: -1.290884 },
+  { id: 75, name: "Old Library", category: "Academic", distance: "South Campus", hours: "Near Administration Block", icon: "▤", color: "#4b6e9b", lat: 5.1045856, lon: -1.2846844 },
+  { id: 76, name: "Administration Block", category: "Academic", distance: "South Campus", hours: "Old Site", icon: "⌬", color: "#6a5792", lat: 5.105474, lon: -1.2841994 },
+  { id: 77, name: "Centre for International Education", category: "Academic", distance: "South Campus", hours: "Near University Hospital", icon: "⌬", color: "#925a4b", lat: 5.1062858, lon: -1.2818572 },
 ];
 
 const categories = [
@@ -273,7 +295,7 @@ export default function Home() {
               {selected && <div className="osm-detail">
                 <span style={{ background: selected.color }}>{selected.icon}</span>
                 <div><small>SELECTED PLACE</small><b>{selected.name}</b><em>{selected.distance} · {selected.hours}</em></div>
-                <a href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(`${selected.name}, University of Cape Coast, Ghana`)}`} target="_blank" rel="noreferrer">View on OSM →</a>
+                <a href={fullMapUrl} target="_blank" rel="noreferrer">Open exact location →</a>
               </div>}
               <div className="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></div>
             </div>
