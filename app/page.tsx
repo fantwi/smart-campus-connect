@@ -58,6 +58,7 @@ export default function Home() {
   const [account, setAccount] = useState<Account>({ identity: null, profile: null });
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountError, setAccountError] = useState("");
+  const [welcomeTime] = useState(() => new Date());
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -69,6 +70,12 @@ export default function Home() {
 
   const accountName = account.profile?.fullName ?? account.identity?.displayName ?? "Create account";
   const accountInitials = accountName === "Create account" ? "+" : accountName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const identityFirstName = accountName.includes("@")
+    ? accountName.split("@")[0].split(/[._-]/)[0]
+    : accountName.split(/\s+/)[0];
+  const firstName = identityFirstName.charAt(0).toUpperCase() + identityFirstName.slice(1);
+  const timeGreeting = welcomeTime.getHours() < 12 ? "Good morning" : welcomeTime.getHours() < 18 ? "Good afternoon" : "Good evening";
+  const welcomeDate = new Intl.DateTimeFormat("en-GH", { weekday: "long", month: "long", day: "numeric" }).format(welcomeTime).toUpperCase();
 
   async function saveAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -153,9 +160,9 @@ export default function Home() {
       <main id="top">
         <section className="hero">
           <div className="hero-copy">
-            <span className="eyebrow"><i /> WEDNESDAY, JULY 29</span>
-            <h1>Good morning, Adwoa.</h1>
-            <p>Where on UCC campus do you need to be?</p>
+            <span className="eyebrow"><i /> {welcomeDate}</span>
+            <h1>{accountLoading ? "Welcome to UCC." : account.identity ? `${timeGreeting}, ${firstName}.` : "Welcome to UCC Campus Connect."}</h1>
+            <p>{accountLoading ? "Getting your campus ready…" : account.profile ? `What can we help you find today, ${firstName}?` : account.identity ? "Complete your profile to personalize your campus experience." : "Explore the University of Cape Coast or sign in to personalize your experience."}</p>
             <div className="global-search">
               <span>⌕</span>
               <input value={query} onChange={(e) => setQuery(e.target.value)} onFocus={() => document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" })} placeholder="Search UCC halls, faculties, services…" aria-label="Search UCC campus" />
