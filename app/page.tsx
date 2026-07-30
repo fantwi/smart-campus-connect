@@ -181,7 +181,7 @@ export default function Home() {
             <p>{accountLoading ? "Getting your campus ready…" : account.profile ? `What can we help you find today, ${firstName}?` : account.identity ? "Complete your profile to personalize your campus experience." : "Explore the University of Cape Coast or sign in to personalize your experience."}</p>
             <div className="global-search">
               <span>⌕</span>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} onFocus={() => document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" })} placeholder="Search UCC halls, faculties, services…" aria-label="Search UCC campus" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search UCC halls, faculties, services…" aria-label="Search UCC campus" />
               <kbd>⌘ K</kbd>
               <button onClick={() => {
                 if (filtered[0]) setSelected(filtered[0]);
