@@ -20,6 +20,28 @@ type Account = {
   profile: { id: string; email: string; fullName: string; studentId: string; programme: string; level: string; createdAt: string } | null;
 };
 
+type CampusWeather = {
+  temperature: number;
+  apparentTemperature: number;
+  humidity: number;
+  windSpeed: number;
+  weatherCode: number;
+  isDay: boolean;
+};
+
+function describeWeather(code: number, isDay: boolean) {
+  if (code === 0) return { icon: isDay ? "☀" : "☾", label: "Clear sky" };
+  if (code === 1) return { icon: isDay ? "🌤" : "☾", label: "Mainly clear" };
+  if (code === 2) return { icon: "⛅", label: "Partly cloudy" };
+  if (code === 3) return { icon: "☁", label: "Overcast" };
+  if ([45, 48].includes(code)) return { icon: "≋", label: "Foggy" };
+  if ([51, 53, 55, 56, 57].includes(code)) return { icon: "🌦", label: "Drizzle" };
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return { icon: "🌧", label: "Rain" };
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return { icon: "❄", label: "Snow" };
+  if ([95, 96, 99].includes(code)) return { icon: "⛈", label: "Thunderstorm" };
+  return { icon: "◌", label: "Current conditions" };
+}
+
 const places: Place[] = [
   { id: 1, name: "Sam Jonah Library", category: "Academic", distance: "4 min walk", hours: "Open until 10 PM", icon: "▤", color: "#003b73", lat: 5.1164881, lon: -1.2909118, accessible: true },
   { id: 2, name: "University Hospital", category: "Health", distance: "On campus", hours: "Emergency care available", icon: "+", color: "#c43d38", lat: 5.1051584, lon: -1.2828135, accessible: true },
@@ -128,6 +150,8 @@ export default function Home() {
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountError, setAccountError] = useState("");
   const [welcomeTime] = useState(() => new Date());
+  const [weather, setWeather] = useState<CampusWeather | null>(null);
+  const [weatherError, setWeatherError] = useState(false);
 
   useEffect(() => {
     fetch("/api/account", { cache: "no-store" })
@@ -135,6 +159,38 @@ export default function Home() {
       .then((data) => setAccount(data))
       .catch(() => setAccountError("Account details could not be loaded."))
       .finally(() => setAccountLoading(false));
+  }, []);
+
+  useEffect(() => {
+    let activeRequest = true;
+    const loadWeather = () => {
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=5.1165&longitude=-1.2909&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&timezone=Africa%2FAccra", { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error("Weather service unavailable");
+          return response.json();
+        })
+        .then((data) => {
+          if (!activeRequest || !data.current) return;
+          setWeather({
+            temperature: data.current.temperature_2m,
+            apparentTemperature: data.current.apparent_temperature,
+            humidity: data.current.relative_humidity_2m,
+            windSpeed: data.current.wind_speed_10m,
+            weatherCode: data.current.weather_code,
+            isDay: Boolean(data.current.is_day),
+          });
+          setWeatherError(false);
+        })
+        .catch(() => {
+          if (activeRequest) setWeatherError(true);
+        });
+    };
+    loadWeather();
+    const refresh = window.setInterval(loadWeather, 10 * 60 * 1000);
+    return () => {
+      activeRequest = false;
+      window.clearInterval(refresh);
+    };
   }, []);
 
   const accountName = account.profile?.fullName ?? account.identity?.displayName ?? "Create account";
@@ -179,6 +235,7 @@ export default function Home() {
   const mapLon = selected?.lon ?? -1.282847;
   const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapLon - 0.004}%2C${mapLat - 0.0035}%2C${mapLon + 0.004}%2C${mapLat + 0.0035}&layer=mapnik&marker=${mapLat}%2C${mapLon}`;
   const fullMapUrl = `https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}#map=18/${mapLat}/${mapLon}`;
+  const weatherCondition = weather ? describeWeather(weather.weatherCode, weather.isDay) : null;
 
   useEffect(() => {
     if (filtered.length && (query.trim() || category !== "All places")) setSelected(filtered[0]);
@@ -256,7 +313,16 @@ export default function Home() {
             <div className="today-head"><span>Today on campus</span><button onClick={() => document.getElementById("updates")?.scrollIntoView({ behavior: "smooth" })}>View calendar →</button></div>
             <div className="event-row"><time><b>10:00</b><small>AM</small></time><i className="blue" /><div><strong>Research Methods Seminar</strong><span>Sam Jonah Library · 1 hr</span></div></div>
             <div className="event-row"><time><b>2:30</b><small>PM</small></time><i className="gold" /><div><strong>SRC Student Forum</strong><span>UCC Auditorium · 90 min</span></div></div>
-            <div className="weather"><span>☀</span><div><b>28°</b><small>Cape Coast</small></div><em>Sea breeze this afternoon</em></div>
+            <div className="weather" aria-live="polite">
+              <span>{weatherCondition?.icon ?? (weatherError ? "◌" : "…" )}</span>
+              <div>
+                <b>{weather ? `${Math.round(weather.temperature)}°C` : weatherError ? "Unavailable" : "Loading"}</b>
+                <small>UCC · Cape Coast</small>
+              </div>
+              <em>{weather
+                ? `${weatherCondition?.label} · Feels ${Math.round(weather.apparentTemperature)}° · Humidity ${weather.humidity}% · Wind ${Math.round(weather.windSpeed)} km/h`
+                : weatherError ? "Could not load current conditions" : "Getting current conditions…"}</em>
+            </div>
           </div>
         </section>
 
