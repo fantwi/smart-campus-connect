@@ -29,6 +29,13 @@ type CampusWeather = {
   isDay: boolean;
 };
 
+type ChatMessage = {
+  from: "ai" | "user";
+  text: string;
+  url?: string;
+  linkLabel?: string;
+};
+
 function describeWeather(code: number, isDay: boolean) {
   if (code === 0) return { icon: isDay ? "☀" : "☾", label: "Clear sky" };
   if (code === 1) return { icon: isDay ? "🌤" : "☾", label: "Mainly clear" };
@@ -142,7 +149,7 @@ export default function Home() {
   const [selected, setSelected] = useState<Place | null>(places[0]);
   const [panel, setPanel] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const [chat, setChat] = useState([
+  const [chat, setChat] = useState<ChatMessage[]>([
     { from: "ai", text: "Welcome! I’m getting your UCC Campus AI ready." },
   ]);
   const [message, setMessage] = useState("");
@@ -273,10 +280,37 @@ export default function Home() {
         .slice()
         .sort((a, b) => b.name.length - a.name.length)
         .find((place) => lower.includes(place.name.toLowerCase()) || (acronymName && place.name.includes(acronymName)));
+      const wantsDirections = /\b(direction|directions|route|walk|walking|navigate|get to|how do i get)\b/.test(lower);
       const personalLead = signedIn ? `${firstName}, ` : "";
       let answer = `${personalLead}I can answer questions about ${places.length} mapped UCC places. Try a facility name, “list lecture halls”, “show hostels in Kwaprow”, “campus weather”, or “my profile”.`;
 
-      if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(lower)) {
+      if (matchedPlace && wantsDirections) {
+        setSelected(matchedPlace);
+        if (!navigator.geolocation) {
+          setChat((current) => [...current, { from: "ai", text: "This browser does not support location services. Open the destination on the Explore UCC map to choose a starting point manually." }]);
+          return;
+        }
+        setChat((current) => [...current, { from: "ai", text: `I found ${matchedPlace.name}. Allow location access and I’ll create a walking route from where you are now.` }]);
+        navigator.geolocation.getCurrentPosition(
+          ({ coords }) => {
+            const route = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_foot&route=${coords.latitude}%2C${coords.longitude}%3B${matchedPlace.lat}%2C${matchedPlace.lon}`;
+            setChat((current) => [...current, {
+              from: "ai",
+              text: `Your walking route to ${matchedPlace.name} is ready. It starts from your current location and ends at the exact campus marker.`,
+              url: route,
+              linkLabel: `Open walking directions to ${matchedPlace.name} →`,
+            }]);
+          },
+          (error) => {
+            const reason = error.code === 1 ? "Location permission was denied" : "Your current location could not be determined";
+            setChat((current) => [...current, { from: "ai", text: `${reason}. Enable location access in your browser and ask me again, or open ${matchedPlace.name} on the map.` }]);
+          },
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+        );
+        return;
+      } else if (wantsDirections) {
+        answer = "Tell me the destination name as well—for example, “Directions to LLT,” “Walk to Sam Jonah Library,” or “How do I get to UCC Hospital?”";
+      } else if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(lower)) {
         answer = `Hi${signedIn ? ` ${firstName}` : ""}! Ask me for a campus location, a list of hostels or lecture halls, current weather, emergency help, or information about your account.`;
       } else if (matchedPlace) {
         setSelected(matchedPlace);
@@ -457,9 +491,9 @@ export default function Home() {
           <button className="modal-close" onClick={() => setPanel(null)}>×</button>
           {panel === "assistant" && <>
             <div className="modal-icon ai">✦</div><h2>{signedIn ? `${firstName}’s Campus AI` : "UCC Campus AI"}</h2><p className="modal-subtitle">{account.profile ? `Personalized for ${account.profile.programme} · Level ${account.profile.level}` : "Answers grounded in verified UCC information"}</p>
-            <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}</div>)}</div>
+            <div className="chat-log">{chat.map((item, index) => <div key={index} className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>)}</div>
             <div className="ai-suggestions">
-              {["List lecture halls", "Hostels in Kwaprow", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
+              {["Directions to LLT", "List lecture halls", "Hostels in Kwaprow", "Current weather", account.profile ? "My profile" : "How do I personalize this?"].map((prompt) => <button key={prompt} onClick={() => sendMessage(prompt)}>{prompt}</button>)}
             </div>
             <div className="chat-input"><input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Ask about UCC places, facilities, weather, or your profile…" autoFocus /><button onClick={() => sendMessage()}>↑</button></div>
           </>}
