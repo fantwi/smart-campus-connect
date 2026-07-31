@@ -1217,7 +1217,7 @@ export default function Home() {
           {panel === "assistant" && renderAssistant(false)}
           {panel === "timetable" && !signedIn && <>
             <div className="modal-icon ai">▦</div><h2>My timetable</h2><p className="modal-subtitle">Sign in to save classes, import your schedule, and receive personalized reminders.</p>
-            <a className="primary-action action-link" href="/signin-with-chatgpt?return_to=%2F">Sign in to create a timetable</a>
+            <a className="primary-action action-link" href="/login">Sign in or create an account</a>
           </>}
           {panel === "timetable" && signedIn && <>
             <div className="modal-icon ai">▦</div><h2>My timetable</h2><p className="modal-subtitle">Campus AI uses your schedule for class reminders, departure times, and directions.</p>
@@ -1263,7 +1263,7 @@ export default function Home() {
             <div className="modal-icon account-icon">◎</div><h2>Create your account</h2>
             <p className="modal-subtitle">Sign in securely to create your UCC Campus Connect profile. Your password is never shared with this app.</p>
             <div className="account-benefits"><span>✓ Save your profile across devices</span><span>✓ Keep your campus activity private</span><span>✓ Sign out at any time</span></div>
-            <a className="primary-action action-link" href="/signin-with-chatgpt?return_to=%2F">Sign in with ChatGPT</a>
+            <a className="primary-action action-link" href="/login">Sign in or create an account</a>
           </>}
           {panel === "profile" && account.identity && !account.profile && <>
             <div className="profile-large">{accountInitials}</div><h2>Complete your UCC profile</h2>
@@ -1276,7 +1276,7 @@ export default function Home() {
               {accountError && <p className="form-error">{accountError}</p>}
               <button className="primary-action" type="submit">Create my account</button>
             </form>
-            <a className="signout-link" href="/signout-with-chatgpt?return_to=%2F">Sign out</a>
+            <a className="signout-link" href="/logout">Sign out</a>
           </>}
           {panel === "profile" && account.profile && <>
             <div className="profile-large">{accountInitials}</div><h2>{account.profile.fullName}</h2>
@@ -1294,7 +1294,7 @@ export default function Home() {
               {accountError && <p className="form-error">{accountError}</p>}
               <button className="primary-action" type="submit">Save changes</button>
             </form></details>
-            <a className="signout-link" href="/signout-with-chatgpt?return_to=%2F">Sign out of UCC Connect</a>
+            <a className="signout-link" href="/logout">Sign out of UCC Connect</a>
           </>}
         </section>
       </div>}

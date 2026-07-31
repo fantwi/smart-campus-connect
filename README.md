@@ -29,6 +29,14 @@ php artisan serve
 
 Open `http://localhost:8000`. Use **Create an account** on the sign-in screen to register the first user.
 
+Email/password accounts are built into the app and require no external identity provider. To optionally enable Google sign-in, create a Google OAuth web client, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and register this callback URL:
+
+```text
+http://localhost:8000/auth/google/callback
+```
+
+`CHATGPT_SIGN_IN_URL` is intentionally blank by default. Set it only when deploying in an environment that supplies a supported Sign in with ChatGPT flow. If these optional values are blank, their buttons are not shown.
+
 For local development with hot reload, use `npm run dev` alongside `php artisan serve`.
 
 ## Data stored in MariaDB

@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+    ],
+
+    // Sign in with ChatGPT is only shown when the hosting environment supplies
+    // a supported sign-in URL. Local email/password accounts never depend on it.
+    'chatgpt' => [
+        'sign_in_url' => env('CHATGPT_SIGN_IN_URL'),
+    ],
+
 ];

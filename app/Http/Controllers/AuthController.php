@@ -6,7 +6,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 class AuthController extends Controller {
     private function form(string $mode) {
-        return response()->view('auth', compact('mode'));
+        return response()->view('auth', [
+            'mode' => $mode,
+            'googleEnabled' => filled(config('services.google.client_id')) && filled(config('services.google.client_secret')),
+            'chatGptSignInUrl' => config('services.chatgpt.sign_in_url'),
+        ]);
     }
     public function showLogin() { return $this->form('login'); }
     public function showRegister() { return $this->form('register'); }
