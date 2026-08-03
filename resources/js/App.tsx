@@ -1175,7 +1175,7 @@ export default function Home() {
             </div>
             <aside className="place-list">
               <div className="list-head"><b>Nearby places</b><span>{filtered.length} results</span></div>
-              <div className="places-scroll">
+              <div className="places-scroll" tabIndex={0} aria-label="Scrollable list of nearby places">
                 {filtered.map((place) => <article key={place.id} className={selected?.id === place.id ? "chosen" : ""} onClick={() => { setSelected(place); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
                   <i style={{ background: `${place.color}18`, color: place.color }}>{place.icon}</i>
                   <div><b>{place.name}</b><span>{place.category} · {place.distance}</span><small><em /> {place.hours}{place.accessible && " · ♿ Accessible"}</small></div>
