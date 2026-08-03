@@ -306,7 +306,7 @@ function findDestination(input: string) {
 
 const categories = [
   ["All places", "⌘"], ["Academic", "▤"], ["Accommodation", "▦"], ["Health", "+"],
-  ["Hostels", "H"], ["Dining", "●"], ["Banking", "₵"], ["Transport", "↔"], ["Safety", "◇"], ["Recreation", "◉"], ["Landmark", "◆"],
+  ["Hostels", ""], ["Dining", "●"], ["Banking", "₵"], ["Transport", "↔"], ["Safety", "◇"], ["Recreation", "◉"], ["Landmark", "◆"],
 ];
 
 const quickActions = [
@@ -1150,7 +1150,7 @@ export default function Home() {
             <button className="location-button" onClick={() => navigator.geolocation ? navigator.geolocation.getCurrentPosition(({ coords }) => { setCurrentLocation({ lat: coords.latitude, lon: coords.longitude }); toast("Location updated"); }, () => toast("Location access was not available")) : toast("Geolocation is not supported")}>◎ Use my location</button>
           </div>
           <div className="category-row">
-            {categories.map(([name, icon]) => <button key={name} className={category === name ? "selected" : ""} onClick={() => setCategory(name)}><i>{icon}</i>{name}</button>)}
+            {categories.map(([name, icon]) => <button key={name} className={category === name ? "selected" : ""} onClick={() => setCategory(name)}>{icon && <i>{icon}</i>}{name}</button>)}
           </div>
           <div className="map-directory">
             <div className="map osm-map">
