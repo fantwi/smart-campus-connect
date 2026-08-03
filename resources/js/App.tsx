@@ -1030,7 +1030,13 @@ export default function Home() {
           : signedIn ? "Your timetable is empty. Open My timetable to add a class or import a CSV file." : "Sign in to create a personal timetable with reminders and route suggestions.";
       }
       const modelResult = await generateCampusAiAnswer(q, answer);
-      setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: lc.answerLead ? `${lc.answerLead}\n${modelResult.answer}` : modelResult.answer, question: q, placeId: responsePlace?.id, updates: responseUpdates, generatedByModel: modelResult.generatedByModel, model: modelResult.model }]);
+      const selectedLanguage = languageOptions.find((item) => item.code === language)?.label ?? "English";
+      const displayedAnswer = modelResult.generatedByModel
+        ? modelResult.answer
+        : language === "en"
+          ? modelResult.answer
+          : `${modelResult.answer}\n\n${selectedLanguage} translation is temporarily unavailable, so the verified English answer is shown.`;
+      setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: displayedAnswer, question: q, placeId: responsePlace?.id, updates: responseUpdates, generatedByModel: modelResult.generatedByModel, model: modelResult.model }]);
     }, 450);
   }
 

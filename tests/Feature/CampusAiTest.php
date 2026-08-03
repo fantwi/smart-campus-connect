@@ -37,6 +37,30 @@ class CampusAiTest extends TestCase
         );
     }
 
+    public function test_it_requests_the_users_selected_language_without_changing_grounded_facts(): void
+    {
+        config()->set('services.openai.key', 'test-key');
+        Http::fake(['https://api.openai.com/v1/responses' => Http::response([
+            'output' => [[
+                'type' => 'message',
+                'content' => [['type' => 'output_text', 'text' => 'Sam Jonah Nwoma Korabea no to pon anwummere dɔn du.']],
+            ]],
+        ])]);
+
+        $this->postJson('/api/campus-ai', [
+            'question' => 'Bere bɛn na library no to pon?',
+            'groundedAnswer' => 'Sam Jonah Library closes at 10 PM.',
+            'language' => 'tw',
+        ])->assertOk()
+            ->assertJsonPath('generatedByModel', true)
+            ->assertJsonPath('answer', 'Sam Jonah Nwoma Korabea no to pon anwummere dɔn du.');
+
+        Http::assertSent(fn (Request $request) =>
+            str_contains($request['instructions'], 'Reply directly in Twi')
+            && str_contains($request['input'], 'Sam Jonah Library closes at 10 PM.')
+        );
+    }
+
     public function test_it_safely_falls_back_when_the_provider_is_unavailable(): void
     {
         config()->set('services.openai.key', 'test-key');
