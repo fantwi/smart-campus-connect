@@ -898,15 +898,26 @@ export default function Home() {
       let responseUpdates: CampusUpdate[] | undefined;
 
       if (wantsCampusUpdates) {
-        const terms = lower.split(/\W+/).filter((term) => term.length > 3 && !["what", "when", "show", "about", "latest", "current"].includes(term));
-        const matches = campusUpdates.filter((update) => {
+        const wantsNews = /\b(news|announcement|announcements|src)\b/.test(lower);
+        const wantsSrc = /\bsrc\b/.test(lower);
+        const candidates = campusUpdates.filter((update) => wantsNews
+          ? update.source === "UCC News" && (!wantsSrc || /\bsrc\b/i.test(`${update.title} ${update.category}`))
+          : update.source === "UCC Academic Calendar" && update.endDate >= todayKey);
+        const terms = lower.split(/\W+/).filter((term) => term.length > 3 && !["what", "when", "show", "about", "latest", "current", "coming", "event", "events", "announcement", "announcements", "deadline", "deadlines", "academic", "calendar"].includes(term));
+        const matches = candidates.filter((update) => {
           const haystack = `${update.title} ${update.summary} ${update.category}`.toLowerCase();
           return terms.length === 0 || terms.some((term) => haystack.includes(term) || (term.startsWith("exam") && haystack.includes("examination")));
         });
-        responseUpdates = (matches.length ? matches : campusUpdates).slice(0, 4);
+        responseUpdates = matches.slice(0, 4);
         answer = responseUpdates.length
-          ? `Here are ${responseUpdates.length} relevant items from official UCC event and academic-calendar sources. Open a card for the complete university notice.`
-          : "I could not reach the current UCC updates feed just now. Please check the official UCC Events portal.";
+          ? wantsNews
+            ? `Here are ${responseUpdates.length} matching items from the official UCC News feed. Open a card for the complete university story.`
+            : `Here are ${responseUpdates.length} active or upcoming items from the official UCC academic calendar. Open a card for the complete calendar entry.`
+          : updatesLoading
+            ? "The official UCC updates feed is still loading. Please try again shortly."
+            : wantsNews
+              ? "I found no matching item in the current UCC News feed. Use the Latest updates section to open the official news page."
+              : "I found no matching active or upcoming item in the official UCC academic calendar.";
       } else if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
         submitIssue();
         return;
