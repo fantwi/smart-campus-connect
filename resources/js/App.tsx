@@ -53,6 +53,14 @@ type CampusUpdate = {
   url: string;
 };
 
+function campusDate(value: string, options: Intl.DateTimeFormatOptions = {}) {
+  return new Intl.DateTimeFormat("en-GH", { timeZone: "Africa/Accra", ...options }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function dateKey(value: Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+}
+
 type RoutePreview = {
   destination: Place;
   distance: number;
@@ -445,6 +453,10 @@ export default function Home() {
   const signedIn = Boolean(account.identity);
   const timeGreeting = welcomeTime.getHours() < 12 ? "Good morning" : welcomeTime.getHours() < 18 ? "Good afternoon" : "Good evening";
   const welcomeDate = new Intl.DateTimeFormat("en-GH", { weekday: "long", month: "long", day: "numeric" }).format(welcomeTime).toUpperCase();
+  const todayKey = dateKey(welcomeTime);
+  const todayUpdates = campusUpdates.filter((update) => update.startDate <= todayKey && update.endDate >= todayKey && update.category === "Academic calendar");
+  const latestUpdates = campusUpdates.filter((update) => update.source === "UCC News").slice(0, 3);
+  const featuredUpdate = latestUpdates[0];
 
   async function saveAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1118,8 +1130,11 @@ export default function Home() {
           </div>
           <div className="today-card">
             <div className="today-head"><span>Today on campus</span><button onClick={() => document.getElementById("updates")?.scrollIntoView({ behavior: "smooth" })}>View calendar →</button></div>
-            <div className="event-row"><time><b>10:00</b><small>AM</small></time><i className="blue" /><div><strong>Research Methods Seminar</strong><span>Sam Jonah Library · 1 hr</span></div></div>
-            <div className="event-row"><time><b>2:30</b><small>PM</small></time><i className="gold" /><div><strong>SRC Student Forum</strong><span>UCC Auditorium · 90 min</span></div></div>
+            {updatesLoading && <div className="campus-status">Checking the official UCC calendar…</div>}
+            {!updatesLoading && todayUpdates.map((update, index) => <a className="event-row" href={update.url} target="_blank" rel="noreferrer" key={update.id}>
+              <time><b>NOW</b><small>ACTIVE</small></time><i className={index % 2 ? "gold" : "blue"} /><div><strong>{update.title}</strong><span>Until {campusDate(update.endDate, { day: "numeric", month: "short" })} · Official UCC calendar ↗</span></div>
+            </a>)}
+            {!updatesLoading && !todayUpdates.length && <div className="campus-status">No verified public campus events are listed for today.</div>}
             <div className="weather" aria-live="polite">
               <span>{weatherCondition?.icon ?? (weatherError ? "◌" : "…" )}</span>
               <div>
@@ -1190,12 +1205,13 @@ export default function Home() {
 
         <section className="updates-section" id="updates">
           <div className="updates-main">
-            <div className="section-title compact"><div><span>STAY INFORMED</span><h2>Latest updates</h2></div><button onClick={() => toast("Showing all announcements")}>View all →</button></div>
-            <article className="featured-update"><div className="date-tile"><b>27</b><span>JUL</span></div><div><span className="tag red">UCC NEWS</span><h3>UCC Counselling Centre produces 25 lay counsellors</h3><p>Twenty-five para-counsellors have graduated from the Young and Wise programme organised by the Counselling Centre.</p><small>University News · July 27, 2026</small></div></article>
+            <div className="section-title compact"><div><span>STAY INFORMED</span><h2>Latest updates</h2></div><a href="https://news.ucc.edu.gh/ucc-news" target="_blank" rel="noreferrer">View all →</a></div>
+            {updatesLoading && <div className="campus-status">Loading the latest official UCC updates…</div>}
+            {!updatesLoading && featuredUpdate && <a className="featured-update" href={featuredUpdate.url} target="_blank" rel="noreferrer"><div className="date-tile"><b>{campusDate(featuredUpdate.startDate, { day: "2-digit" })}</b><span>{campusDate(featuredUpdate.startDate, { month: "short" }).toUpperCase()}</span></div><div><span className="tag red">UCC NEWS</span><h3>{featuredUpdate.title}</h3><p>{featuredUpdate.summary}</p><small>{featuredUpdate.source} · {campusDate(featuredUpdate.startDate, { day: "numeric", month: "long", year: "numeric" })} ↗</small></div></a>}
             <div className="mini-updates">
-              <article><span className="tag purple">SRC</span><b>UCC SRC unveils 2026–2031 strategic plan</b><small>July 23 · University News</small></article>
-              <article><span className="tag orange">CAMPUS</span><b>New student executives inducted</b><small>2026/2027 academic year</small></article>
+              {latestUpdates.slice(1).map((update, index) => <a href={update.url} target="_blank" rel="noreferrer" key={update.id}><span className={`tag ${index ? "orange" : "purple"}`}>{update.category.toUpperCase()}</span><b>{update.title}</b><small>{campusDate(update.startDate, { day: "numeric", month: "long", year: "numeric" })} · {update.source} ↗</small></a>)}
             </div>
+            {!updatesLoading && !featuredUpdate && <div className="campus-status">Official UCC updates are temporarily unavailable. Use “View all” to check the university news page.</div>}
           </div>
           <aside className="safety-card">
             <i>◇</i><div><span>AVAILABLE 24/7</span><h3>Campus safety</h3><p>Security support is always a tap away.</p></div>
