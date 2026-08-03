@@ -5,7 +5,7 @@ use Illuminate\Http\Request;
 class AccountController extends Controller {
     private function payload(Request $r) {
         $u=$r->user(); $p=$u ? Profile::where('email',$u->email)->first() : null;
-        return ['identity'=>$u ? ['displayName'=>$u->name,'email'=>$u->email,'fullName'=>$u->name] : null,
+        return ['identity'=>$u ? ['displayName'=>$u->name,'email'=>$u->email,'fullName'=>$u->name,'emailVerified'=>$u->hasVerifiedEmail()] : null,
             'profile'=>$p ? ['id'=>$p->id,'email'=>$p->email,'fullName'=>$p->full_name,'studentId'=>$p->student_id,'programme'=>$p->programme,'level'=>$p->level,'createdAt'=>$p->created_at] : null];
     }
     public function show(Request $r) { return response()->json($this->payload($r)); }

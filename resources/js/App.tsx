@@ -18,7 +18,7 @@ type Place = {
 };
 
 type Account = {
-  identity: { displayName: string; email: string; fullName: string | null } | null;
+  identity: { displayName: string; email: string; fullName: string | null; emailVerified: boolean } | null;
   profile: { id: string; email: string; fullName: string; studentId: string; programme: string; level: string; createdAt: string } | null;
 };
 
@@ -1035,7 +1035,7 @@ export default function Home() {
                 <div className="facility-facts"><span><b>Hours / location</b>{cardPlace.hours}</span><span><b>Accessibility</b>{cardPlace.accessible ? "♿ Accessible" : "Not confirmed"}</span><span><b>Contact</b>{placeContact(cardPlace)}</span></div>
                 <div className="facility-actions"><button onClick={() => sendMessage(`${preferences.travelMode === "shuttle" ? "Shuttle" : "Directions"} to ${cardPlace.name}`)}>⌖ {preferences.travelMode === "shuttle" ? "Shuttle route" : "Directions"}</button><button onClick={() => toggleSavedPlace(cardPlace.id)}>{saved.includes(cardPlace.id) ? "♥ Saved" : "♡ Save"}</button><button onClick={() => { setSelected(cardPlace); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Open map</button></div></div>
               </article>}
-              {item.from === "ai" && item.id && item.id !== "welcome" && <div className="answer-feedback">
+              {account.identity?.emailVerified && item.from === "ai" && item.id && item.id !== "welcome" && <div className="answer-feedback">
                 {feedbackGiven[item.id] ? <span>✓ {lc.received}</span> : <>
                   <button onClick={() => submitAiFeedback(item, "helpful")}>👍 {lc.helpful}</button>
                   <button onClick={() => submitAiFeedback(item, "not_helpful")}>👎 {lc.notHelpful}</button>

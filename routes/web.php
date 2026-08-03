@@ -22,7 +22,7 @@ Route::prefix('api')->group(function(){
  Route::get('/account',[AccountController::class,'show']); Route::post('/account',[AccountController::class,'store'])->middleware(['auth','verified','throttle:account-writes']);
  Route::get('/timetable',[TimetableController::class,'index']); Route::post('/timetable',[TimetableController::class,'store'])->middleware(['auth','verified','throttle:timetable-writes']); Route::delete('/timetable',[TimetableController::class,'destroy'])->middleware(['auth','verified','throttle:timetable-writes']);
  Route::get('/preferences',[PreferenceController::class,'show']); Route::post('/preferences',[PreferenceController::class,'store'])->middleware(['auth','verified','throttle:preference-writes']);
- Route::post('/issues',[IssueController::class,'store'])->middleware(['auth','verified','throttle:issue-submissions']); Route::post('/feedback',[FeedbackController::class,'store'])->middleware('throttle:feedback');
+ Route::post('/issues',[IssueController::class,'store'])->middleware(['auth','verified','throttle:issue-submissions']); Route::post('/feedback',[FeedbackController::class,'store'])->middleware(['auth','verified','throttle:feedback']);
  Route::get('/issues/{report}/photo',[IssueController::class,'photo'])->middleware(['auth','verified'])->name('issues.photo');
  Route::get('/campus-updates',CampusUpdateController::class);
 });
