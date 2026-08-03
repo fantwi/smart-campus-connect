@@ -68,6 +68,10 @@ function dateKey(value: Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
 }
 
+function rateableAiMessage(text: string, question: string, extra: Partial<ChatMessage> = {}): ChatMessage {
+  return { id: crypto.randomUUID(), from: "ai", text, question, ...extra };
+}
+
 type RoutePreview = {
   destination: Place;
   distance: number;
@@ -690,20 +694,17 @@ export default function Home() {
         landmarks: landmarkCandidates,
         start: { lat: startLat, lon: startLon },
       });
-      setChat((current) => [...current, {
-        from: "ai",
-        text: `Your walking route to ${destination.name} is ready: ${(result.distance / 1000).toFixed(1)} km, about ${Math.max(1, Math.round(result.duration / 60))} minutes. I’ve opened the interactive preview with landmarks and step-by-step guidance.`,
-        url: fallbackUrl,
-        linkLabel: "Open route in OpenStreetMap →",
-        placeId: destination.id,
-      }]);
+      setChat((current) => [...current, rateableAiMessage(
+        `Your walking route to ${destination.name} is ready: ${(result.distance / 1000).toFixed(1)} km, about ${Math.max(1, Math.round(result.duration / 60))} minutes. I’ve opened the interactive preview with landmarks and step-by-step guidance.`,
+        `Directions to ${destination.name}`,
+        { url: fallbackUrl, linkLabel: "Open route in OpenStreetMap →", placeId: destination.id },
+      )]);
     } catch {
-      setChat((current) => [...current, {
-        from: "ai",
-        text: `I found your location, but the in-app walking route could not be loaded. You can still open directions to ${destination.name} in OpenStreetMap.`,
-        url: fallbackUrl,
-        linkLabel: `Open directions to ${destination.name} →`,
-      }]);
+      setChat((current) => [...current, rateableAiMessage(
+        `I found your location, but the in-app walking route could not be loaded. You can still open directions to ${destination.name} in OpenStreetMap.`,
+        `Directions to ${destination.name}`,
+        { url: fallbackUrl, linkLabel: `Open directions to ${destination.name} →` },
+      )]);
     } finally {
       setRouteLoading(false);
     }
@@ -758,17 +759,17 @@ export default function Home() {
       return (a.distance + accessibilityA) - (b.distance + accessibilityB);
     }).slice(0, 3);
     if (!candidates.length) {
-      setChat((current) => [...current, { from: "ai", text: `I could not find a mapped ${kind} near ${originLabel}.` }]);
+      setChat((current) => [...current, rateableAiMessage(`I could not find a mapped ${kind} near ${originLabel}.`, `Find the closest ${kind} to ${originLabel}`)]);
       return;
     }
     const nearest = candidates[0].place;
     setSelected(nearest);
     setLastReferencedPlace(nearest);
-    setChat((current) => [...current, {
-      from: "ai",
-      text: `Closest ${kind === "food" ? "food options" : `${kind}s`} to ${originLabel}: ${candidates.map(({ place, distance }) => `${place.name} (${distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(1)} km`})`).join(", ")}. I’ve selected ${nearest.name} on the map.`,
-      placeId: nearest.id,
-    }]);
+    setChat((current) => [...current, rateableAiMessage(
+      `Closest ${kind === "food" ? "food options" : `${kind}s`} to ${originLabel}: ${candidates.map(({ place, distance }) => `${place.name} (${distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(1)} km`})`).join(", ")}. I’ve selected ${nearest.name} on the map.`,
+      `Find the closest ${kind} to ${originLabel}`,
+      { placeId: nearest.id },
+    )]);
   }
 
   function useLocationForIssue() {
@@ -953,7 +954,7 @@ export default function Home() {
           navigator.geolocation.getCurrentPosition(({ coords }) => {
             setCurrentLocation({ lat: coords.latitude, lon: coords.longitude });
             loadWalkingRoute(coords.latitude, coords.longitude, lastReferencedPlace);
-          }, () => setChat((current) => [...current, { from: "ai", text: "I need location access to calculate your walking time." }]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+          }, () => setChat((current) => [...current, rateableAiMessage("I need location access to calculate your walking time.", `Walking time to ${lastReferencedPlace.name}`)]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
           return;
         }
       } else if (wantsDiscovery && discoveryKind) {
@@ -973,7 +974,7 @@ export default function Home() {
             const origin = { lat: coords.latitude, lon: coords.longitude };
             setCurrentLocation(origin);
             shareNearbyResults(discoveryKind, origin, "your current location");
-          }, () => setChat((current) => [...current, { from: "ai", text: "Location access is needed for nearby discovery. You can also name a place, then ask what is closest to it." }]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+          }, () => setChat((current) => [...current, rateableAiMessage("Location access is needed for nearby discovery. You can also name a place, then ask what is closest to it.", q)]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
           return;
         }
       } else if (matchedPlace && wantsDirections) {
@@ -981,7 +982,7 @@ export default function Home() {
         setLastReferencedPlace(matchedPlace);
         updatePreferences({ visitedPlaceId: matchedPlace.id });
         if (!navigator.geolocation) {
-          setChat((current) => [...current, { from: "ai", text: "This browser does not support location services. Open the destination on the Explore UCC map to choose a starting point manually." }]);
+          setChat((current) => [...current, rateableAiMessage("This browser does not support location services. Open the destination on the Explore UCC map to choose a starting point manually.", q, { placeId: matchedPlace.id })]);
           return;
         }
         setChat((current) => [...current, { from: "ai", text: `I found ${matchedPlace.name}. Allow location access and I’ll create a walking route from where you are now.` }]);
@@ -992,7 +993,7 @@ export default function Home() {
           },
           (error) => {
             const reason = error.code === 1 ? "Location permission was denied" : "Your current location could not be determined";
-            setChat((current) => [...current, { from: "ai", text: `${reason}. Enable location access in your browser and ask me again, or open ${matchedPlace.name} on the map.` }]);
+            setChat((current) => [...current, rateableAiMessage(`${reason}. Enable location access in your browser and ask me again, or open ${matchedPlace.name} on the map.`, q, { placeId: matchedPlace.id })]);
           },
           { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
         );
