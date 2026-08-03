@@ -30,6 +30,8 @@ footer{background:#082f57}
 footer .brand-mark{background:#0b477d;border-color:#f2c84b;color:#fff}
 .osm-map{background:#dfe7ec}
 .osm-map iframe{width:100%;height:100%;border:0;display:block;filter:saturate(.88) contrast(.96)}
+.facility-map{position:relative}
+.osm-marker{position:absolute;z-index:3;left:50%;top:50%;width:22px;height:22px;border:4px solid #fff;border-radius:50% 50% 50% 0;background:#c63f35;box-shadow:0 2px 7px #0c294466;transform:translate(-50%,-100%) rotate(-45deg);pointer-events:none}.osm-marker::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:50%;background:#fff;transform:translate(-50%,-50%)}
 .osm-topbar{position:absolute;z-index:4;left:14px;right:14px;top:14px;background:#fff;box-shadow:0 5px 18px #0c29443d;border-radius:8px;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;font-size:9px;font-weight:750;pointer-events:none}
 .osm-topbar span{display:flex;align-items:center;gap:7px}.osm-topbar span i{width:8px;height:8px;border-radius:50%;background:#e3ae20;box-shadow:0 0 0 3px #f9edc5}.osm-topbar a{color:var(--green);text-decoration:none;pointer-events:auto}
 .osm-detail{position:absolute;z-index:4;left:14px;bottom:28px;background:#fff;border-radius:9px;padding:11px 12px;box-shadow:0 7px 22px #0c29443d;display:flex;align-items:center;gap:10px;min-width:310px}

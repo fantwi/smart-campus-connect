@@ -563,7 +563,7 @@ export default function Home() {
   }), [category, query]);
   const mapLat = selected?.lat ?? 5.104722;
   const mapLon = selected?.lon ?? -1.282847;
-  const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapLon - 0.004}%2C${mapLat - 0.0035}%2C${mapLon + 0.004}%2C${mapLat + 0.0035}&layer=mapnik&marker=${mapLat}%2C${mapLon}`;
+  const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapLon - 0.004}%2C${mapLat - 0.0035}%2C${mapLon + 0.004}%2C${mapLat + 0.0035}&layer=mapnik`;
   const fullMapUrl = `https://www.openstreetmap.org/?mlat=${mapLat}&mlon=${mapLon}#map=18/${mapLat}/${mapLon}`;
   const weatherCondition = weather ? describeWeather(weather.weatherCode, weather.isDay) : null;
   const routeDrawing = useMemo(() => {
@@ -1021,7 +1021,7 @@ export default function Home() {
         <div className="assistant-conversation">
           <div className="chat-log">{chat.map((item, index) => {
             const cardPlace = item.placeId ? places.find((place) => place.id === item.placeId) : null;
-            const cardMap = cardPlace ? `https://www.openstreetmap.org/export/embed.html?bbox=${cardPlace.lon - 0.002}%2C${cardPlace.lat - 0.0017}%2C${cardPlace.lon + 0.002}%2C${cardPlace.lat + 0.0017}&layer=mapnik&marker=${cardPlace.lat}%2C${cardPlace.lon}` : "";
+            const cardMap = cardPlace ? `https://www.openstreetmap.org/export/embed.html?bbox=${cardPlace.lon - 0.002}%2C${cardPlace.lat - 0.0017}%2C${cardPlace.lon + 0.002}%2C${cardPlace.lat + 0.0017}&layer=mapnik` : "";
             return <div key={index} className={`chat-message ${item.from}`}>
               <div className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>
               {item.updates && <div className="chat-update-cards">{item.updates.map((update) => <a key={update.id} href={update.url} target="_blank" rel="noreferrer">
@@ -1030,7 +1030,7 @@ export default function Home() {
                 <p>{update.summary}</p><em>{update.source} ↗</em>
               </a>)}</div>}
               {cardPlace && <article className="facility-card">
-                <div className="facility-map"><iframe title={`Map preview of ${cardPlace.name}`} src={cardMap} loading="lazy" /></div>
+                <div className="facility-map"><iframe title={`Map preview of ${cardPlace.name}`} src={cardMap} loading="lazy" /><span className="osm-marker" aria-hidden="true" /></div>
                 <div className="facility-card-body"><div className="facility-title"><span style={{ background: cardPlace.color }}>{cardPlace.icon}</span><div><b>{cardPlace.name}</b><small>{cardPlace.category} · {cardPlace.distance}</small></div></div>
                 <div className="facility-facts"><span><b>Hours / location</b>{cardPlace.hours}</span><span><b>Accessibility</b>{cardPlace.accessible ? "♿ Accessible" : "Not confirmed"}</span><span><b>Contact</b>{placeContact(cardPlace)}</span></div>
                 <div className="facility-actions"><button onClick={() => sendMessage(`${preferences.travelMode === "shuttle" ? "Shuttle" : "Directions"} to ${cardPlace.name}`)}>⌖ {preferences.travelMode === "shuttle" ? "Shuttle route" : "Directions"}</button><button onClick={() => toggleSavedPlace(cardPlace.id)}>{saved.includes(cardPlace.id) ? "♥ Saved" : "♡ Save"}</button><button onClick={() => { setSelected(cardPlace); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Open map</button></div></div>
@@ -1161,6 +1161,7 @@ export default function Home() {
                 loading="lazy"
                 referrerPolicy="strict-origin-when-cross-origin"
               />
+              <span className="osm-marker" aria-hidden="true" />
               <div className="osm-topbar">
                 <span><i /> University of Cape Coast</span>
                 <a href={fullMapUrl} target="_blank" rel="noreferrer">Open full map ↗</a>
