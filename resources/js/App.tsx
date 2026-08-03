@@ -511,29 +511,37 @@ export default function Home() {
     return true;
   }
 
-  async function updatePreferences(patch: Record<string, unknown>) {
-    if (!signedIn) return;
+  async function updatePreferences(patch: Record<string, unknown>, notifyOnFailure = false): Promise<UserPreferences | null> {
+    if (!signedIn) return null;
     try {
       const response = await fetch("/api/preferences", {
         method: "POST",
         headers: { ...csrfHeaders, "content-type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (response.ok) {
-        const data = await response.json();
-        setPreferences(data);
-        setSaved(data.savedPlaces ?? []);
+      if (!response.ok) {
+        if (notifyOnFailure) toast(response.status === 419 ? "Your session expired. Refresh the page and sign in again." : "Your preference could not be saved. Please try again.");
+        return null;
       }
+      const data = await response.json() as UserPreferences;
+      setPreferences(data);
+      setSaved(data.savedPlaces ?? []);
+      return data;
     } catch {
-      // Keep the current session responsive if preference syncing is unavailable.
+      if (notifyOnFailure) toast("Campus Connect could not save that change. Check your connection and try again.");
+      return null;
     }
   }
 
-  function toggleSavedPlace(placeId: number) {
+  async function toggleSavedPlace(placeId: number) {
+    if (!signedIn) {
+      setPanel("profile");
+      toast("Sign in to save places to your account");
+      return;
+    }
     const next = saved.includes(placeId) ? saved.filter((id) => id !== placeId) : [...saved, placeId];
-    setSaved(next);
-    updatePreferences({ savedPlaces: next });
-    toast(next.includes(placeId) ? "Place saved" : "Place removed from saved");
+    const synced = await updatePreferences({ savedPlaces: next }, true);
+    if (synced) toast(next.includes(placeId) ? "Place saved" : "Place removed from saved");
   }
 
   async function addTimetableEntry(event: React.FormEvent<HTMLFormElement>) {
@@ -1344,7 +1352,7 @@ export default function Home() {
             <div className="profile-large">{accountInitials}</div><h2>{account.profile.fullName}</h2>
             <p className="modal-subtitle">{account.profile.programme} · Level {account.profile.level}<br />{account.profile.studentId}</p>
             <div className="stats"><div><b>{saved.length}</b><span>Saved places</span></div><div><b>2</b><span>Open reports</span></div><div><b>{Object.values(preferences.visitCounts).reduce((total, count) => total + count, 0)}</b><span>Place views</span></div></div>
-            <div className="preference-panel"><h3>Campus AI preferences</h3><label className="preference-toggle"><input type="checkbox" checked={preferences.accessibilityRequired} onChange={(event) => updatePreferences({ accessibilityRequired: event.target.checked })} /><span><b>Prioritize accessible places</b><small>Highlight confirmed accessible facilities and routes</small></span></label><label>Preferred travel mode<select value={preferences.travelMode} onChange={(event) => updatePreferences({ travelMode: event.target.value })}><option value="walking">Walking</option><option value="shuttle">Campus shuttle</option></select></label>
+            <div className="preference-panel"><h3>Campus AI preferences</h3><label className="preference-toggle"><input type="checkbox" checked={preferences.accessibilityRequired} onChange={(event) => updatePreferences({ accessibilityRequired: event.target.checked }, true)} /><span><b>Prioritize accessible places</b><small>Highlight confirmed accessible facilities and routes</small></span></label><label>Preferred travel mode<select value={preferences.travelMode} onChange={(event) => updatePreferences({ travelMode: event.target.value }, true)}><option value="walking">Walking</option><option value="shuttle">Campus shuttle</option></select></label>
               {Object.keys(preferences.visitCounts).length > 0 && <div className="memory-list"><b>Frequently visited</b><span>{Object.entries(preferences.visitCounts).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([id]) => places.find((place) => place.id === Number(id))?.name).filter(Boolean).join(" · ")}</span></div>}
               {preferences.recentQuestions.length > 0 && <div className="memory-list"><b>Recent questions</b><div>{preferences.recentQuestions.slice(0, 4).map((question) => <button key={question} onClick={() => { setPanel("assistant"); sendMessage(question); }}>{question}</button>)}</div></div>}
             </div>
