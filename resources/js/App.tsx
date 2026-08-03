@@ -346,7 +346,7 @@ export default function Home() {
   const [account, setAccount] = useState<Account>({ identity: null, profile: null });
   const [accountLoading, setAccountLoading] = useState(true);
   const [accountError, setAccountError] = useState("");
-  const [welcomeTime] = useState(() => new Date());
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [weather, setWeather] = useState<CampusWeather | null>(null);
   const [weatherError, setWeatherError] = useState(false);
   const [route, setRoute] = useState<RoutePreview | null>(null);
@@ -371,6 +371,11 @@ export default function Home() {
   useEffect(() => {
     const savedLanguage = window.localStorage.getItem("ucc-language") as Language | null;
     if (savedLanguage && languageOptions.some((item) => item.code === savedLanguage)) setLanguage(savedLanguage);
+  }, []);
+
+  useEffect(() => {
+    const refreshClock = window.setInterval(() => setCurrentTime(new Date()), 30_000);
+    return () => window.clearInterval(refreshClock);
   }, []);
 
   useEffect(() => {
@@ -458,9 +463,9 @@ export default function Home() {
     : accountName.split(/\s+/)[0];
   const firstName = identityFirstName.charAt(0).toUpperCase() + identityFirstName.slice(1);
   const signedIn = Boolean(account.identity);
-  const timeGreeting = welcomeTime.getHours() < 12 ? "Good morning" : welcomeTime.getHours() < 18 ? "Good afternoon" : "Good evening";
-  const welcomeDate = new Intl.DateTimeFormat("en-GH", { weekday: "long", month: "long", day: "numeric" }).format(welcomeTime).toUpperCase();
-  const todayKey = dateKey(welcomeTime);
+  const timeGreeting = currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 18 ? "Good afternoon" : "Good evening";
+  const welcomeDate = new Intl.DateTimeFormat("en-GH", { weekday: "long", month: "long", day: "numeric" }).format(currentTime).toUpperCase();
+  const todayKey = dateKey(currentTime);
   const todayUpdates = campusUpdates.filter((update) => update.startDate <= todayKey && update.endDate >= todayKey && update.category === "Academic calendar");
   const latestUpdates = campusUpdates.filter((update) => update.source === "UCC News").slice(0, 3);
   const featuredUpdate = latestUpdates[0];
@@ -600,7 +605,7 @@ export default function Home() {
     };
   }, [route]);
   const nextClass = useMemo(() => {
-    const now = new Date();
+    const now = currentTime;
     const candidates = timetable.map((entry) => {
       const [hours, minutes] = entry.startTime.split(":").map(Number);
       const start = new Date(now);
@@ -614,7 +619,7 @@ export default function Home() {
       return { entry, start, minutesAway: Math.round((start.getTime() - now.getTime()) / 60000) };
     });
     return candidates.sort((a, b) => a.start.getTime() - b.start.getTime())[0] ?? null;
-  }, [timetable, welcomeTime]);
+  }, [timetable, currentTime]);
   const contextSuggestions = useMemo(() => {
     const suggestions: { title: string; detail: string; action?: string }[] = [];
     if (nextClass) {
