@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -54,11 +55,46 @@ class OAuthController extends Controller
             ->json();
 
         abort_unless(($identity['email_verified'] ?? false) && filled($identity['email'] ?? null), 403, 'Google did not provide a verified email address.');
+        abort_unless(filled($identity['sub'] ?? null), 403, 'Google did not provide a stable account identifier.');
 
-        $user = User::firstOrCreate(
-            ['email' => strtolower($identity['email'])],
-            ['name' => $identity['name'] ?? Str::before($identity['email'], '@'), 'password' => Hash::make(Str::random(48))],
-        );
+        $email = strtolower($identity['email']);
+        $subject = (string) $identity['sub'];
+        $user = User::where('google_sub', $subject)->first();
+
+        if (! $user) {
+            $user = User::where('email', $email)->first();
+
+            if ($user && filled($user->google_sub) && ! hash_equals($user->google_sub, $subject)) {
+                abort(409, 'This email address is already linked to another Google account.');
+            }
+
+            if (! $user) {
+                $user = User::create([
+                    'name' => $identity['name'] ?? Str::before($email, '@'),
+                    'email' => $email,
+                    'password' => Hash::make(Str::random(48)),
+                    'google_sub' => $subject,
+                    'email_verified_at' => now(),
+                ]);
+            } elseif (! $user->hasVerifiedEmail()) {
+                // A verified Google identity may claim a matching unverified
+                // registration, but the old password and sessions must not survive.
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+                $user->forceFill([
+                    'name' => $identity['name'] ?? $user->name,
+                    'password' => Hash::make(Str::random(48)),
+                    'remember_token' => Str::random(60),
+                    'google_sub' => $subject,
+                    'email_verified_at' => now(),
+                ])->save();
+            } else {
+                $user->forceFill(['google_sub' => $subject])->save();
+            }
+        }
+
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
 
         Auth::login($user, true);
         $request->session()->regenerate();

@@ -10,7 +10,7 @@ class AccountController extends Controller {
     }
     public function show(Request $r) { return response()->json($this->payload($r)); }
     public function store(Request $r) {
-        $d=$r->validate(['fullName'=>'required|min:2','studentId'=>'required|min:4','programme'=>'required|min:2','level'=>'required|in:100,200,300,400,500,Graduate,Staff']);
+        $d=$r->validate(['fullName'=>'required|string|min:2|max:255','studentId'=>'required|string|min:4|max:100','programme'=>'required|string|min:2|max:255','level'=>'required|string|in:100,200,300,400,500,Graduate,Staff']);
         Profile::updateOrCreate(['email'=>$r->user()->email],['full_name'=>$d['fullName'],'student_id'=>strtoupper($d['studentId']),'programme'=>$d['programme'],'level'=>$d['level']]);
         return response()->json($this->payload($r));
     }

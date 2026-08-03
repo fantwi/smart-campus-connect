@@ -17,12 +17,12 @@ class AuthController extends Controller {
     public function login(Request $r) {
         $data=$r->validate(['email'=>'required|email','password'=>'required']);
         if (!Auth::attempt($data, true)) return back()->withErrors(['email'=>'The credentials do not match our records.'])->onlyInput('email');
-        $r->session()->regenerate(); return redirect('/');
+        $r->session()->regenerate(); return $r->user()->hasVerifiedEmail() ? redirect('/') : redirect()->route('verification.notice');
     }
     public function register(Request $r) {
         $data=$r->validate(['name'=>'required|min:2|max:255','email'=>'required|email|unique:users','password'=>'required|min:8|confirmed']);
-        $user=User::create(['name'=>$data['name'],'email'=>$data['email'],'password'=>Hash::make($data['password'])]);
-        Auth::login($user); $r->session()->regenerate(); return redirect('/');
+        $user=User::create(['name'=>$data['name'],'email'=>strtolower($data['email']),'password'=>Hash::make($data['password'])]);
+        Auth::login($user); $r->session()->regenerate(); $user->sendEmailVerificationNotification(); return redirect()->route('verification.notice');
     }
     public function logout(Request $r) {
         Auth::logout(); $r->session()->invalidate(); $r->session()->regenerateToken(); return redirect('/');

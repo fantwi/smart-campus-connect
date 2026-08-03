@@ -4,7 +4,7 @@ Smart-campus application for the University of Cape Coast, built with Laravel, R
 
 ## Requirements
 
-- PHP 8.2 or newer
+- PHP 8.3 or newer
 - Composer
 - Node.js 20 or newer
 - MariaDB 10.6 or newer
@@ -21,7 +21,6 @@ Create a MariaDB database named `smart_campus`, update the `DB_*` values in `.en
 
 ```bash
 php artisan migrate
-php artisan storage:link
 npm install
 npm run build
 php artisan serve
@@ -48,4 +47,15 @@ For local development with hot reload, use `npm run dev` alongside `php artisan 
 - Campus issue reports and uploaded-photo paths
 - AI answer feedback
 
-Uploaded issue photos are stored on Laravel's `public` disk. Run `php artisan storage:link` once so they can be served from the web.
+Uploaded issue photos are stored on Laravel's private `local` disk and are served only through the authenticated, owner-authorized application endpoint.
+
+## Production configuration
+
+Start production deployments from the hardened template rather than the local-development example:
+
+```bash
+cp .env.production.example .env
+php artisan key:generate
+```
+
+Replace every placeholder host, database credential, and mail credential before deployment. Production startup fails closed when debugging is enabled, the application URL is not HTTPS, secure or HTTP-only session cookies are disabled, or the SameSite policy is unsafe. Do not use a database root account for the application.

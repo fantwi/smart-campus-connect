@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? "";
+
 type Place = {
   id: number;
   name: string;
@@ -1276,7 +1278,10 @@ export default function Home() {
               {accountError && <p className="form-error">{accountError}</p>}
               <button className="primary-action" type="submit">Create my account</button>
             </form>
-            <a className="signout-link" href="/logout">Sign out</a>
+            <form className="signout-form" method="post" action="/logout">
+              <input type="hidden" name="_token" value={csrfToken} />
+              <button className="signout-link" type="submit">Sign out</button>
+            </form>
           </>}
           {panel === "profile" && account.profile && <>
             <div className="profile-large">{accountInitials}</div><h2>{account.profile.fullName}</h2>
@@ -1294,7 +1299,10 @@ export default function Home() {
               {accountError && <p className="form-error">{accountError}</p>}
               <button className="primary-action" type="submit">Save changes</button>
             </form></details>
-            <a className="signout-link" href="/logout">Sign out of UCC Connect</a>
+            <form className="signout-form" method="post" action="/logout">
+              <input type="hidden" name="_token" value={csrfToken} />
+              <button className="signout-link" type="submit">Sign out of UCC Connect</button>
+            </form>
           </>}
         </section>
       </div>}
