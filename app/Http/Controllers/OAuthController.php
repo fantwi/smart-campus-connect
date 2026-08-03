@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -39,20 +41,41 @@ class OAuthController extends Controller
             return redirect('/login')->withErrors(['oauth' => 'The Google sign-in request expired. Please try again.']);
         }
 
-        $request->validate(['code' => ['required', 'string']]);
+        $request->validate(['code' => ['required', 'string', 'max:2048']]);
 
-        $token = Http::asForm()->post('https://oauth2.googleapis.com/token', [
-            'client_id' => config('services.google.client_id'),
-            'client_secret' => config('services.google.client_secret'),
-            'code' => $request->query('code'),
-            'grant_type' => 'authorization_code',
-            'redirect_uri' => route('oauth.google.callback'),
-        ])->throw()->json();
+        try {
+            $tokenResponse = Http::asForm()
+                ->acceptJson()
+                ->connectTimeout(3)
+                ->timeout(10)
+                ->post('https://oauth2.googleapis.com/token', [
+                    'client_id' => config('services.google.client_id'),
+                    'client_secret' => config('services.google.client_secret'),
+                    'code' => $request->query('code'),
+                    'grant_type' => 'authorization_code',
+                    'redirect_uri' => route('oauth.google.callback'),
+                ])
+                ->throw();
 
-        $identity = Http::withToken($token['access_token'])
-            ->get('https://openidconnect.googleapis.com/v1/userinfo')
-            ->throw()
-            ->json();
+            $accessToken = $tokenResponse->json('access_token');
+            if (! is_string($accessToken) || $accessToken === '' || strlen($accessToken) > 4096) {
+                return $this->providerFailure();
+            }
+
+            $identityResponse = Http::withToken($accessToken)
+                ->acceptJson()
+                ->connectTimeout(3)
+                ->timeout(10)
+                ->get('https://openidconnect.googleapis.com/v1/userinfo')
+                ->throw();
+
+            $identity = $identityResponse->json();
+            if (! is_array($identity)) {
+                return $this->providerFailure();
+            }
+        } catch (ConnectionException|RequestException) {
+            return $this->providerFailure();
+        }
 
         abort_unless(($identity['email_verified'] ?? false) && filled($identity['email'] ?? null), 403, 'Google did not provide a verified email address.');
         abort_unless(filled($identity['sub'] ?? null), 403, 'Google did not provide a stable account identifier.');
@@ -105,5 +128,12 @@ class OAuthController extends Controller
     private function googleIsConfigured(): bool
     {
         return filled(config('services.google.client_id')) && filled(config('services.google.client_secret'));
+    }
+
+    private function providerFailure(): RedirectResponse
+    {
+        return redirect('/login')->withErrors([
+            'oauth' => 'Google sign-in is temporarily unavailable. Please try again or use your Campus Connect account.',
+        ]);
     }
 }

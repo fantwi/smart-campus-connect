@@ -153,4 +153,32 @@ class AuthenticationTest extends TestCase
         $this->assertFalse(Hash::check('attacker-password', $user->password));
         $this->assertAuthenticatedAs($user);
     }
+
+    public function test_google_provider_failures_return_a_safe_login_error(): void
+    {
+        config()->set('services.google.client_id', 'client-id');
+        config()->set('services.google.client_secret', 'client-secret');
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['error' => 'provider failure'], 503),
+        ]);
+
+        $this->withSession(['google_oauth_state' => 'expected-state'])
+            ->get('/auth/google/callback?state=expected-state&code=authorization-code')
+            ->assertRedirect('/login')
+            ->assertSessionHasErrors(['oauth' => 'Google sign-in is temporarily unavailable. Please try again or use your Campus Connect account.']);
+    }
+
+    public function test_google_token_response_must_contain_a_bounded_access_token(): void
+    {
+        config()->set('services.google.client_id', 'client-id');
+        config()->set('services.google.client_secret', 'client-secret');
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['token_type' => 'Bearer']),
+        ]);
+
+        $this->withSession(['google_oauth_state' => 'expected-state'])
+            ->get('/auth/google/callback?state=expected-state&code=authorization-code')
+            ->assertRedirect('/login')
+            ->assertSessionHasErrors('oauth');
+    }
 }
