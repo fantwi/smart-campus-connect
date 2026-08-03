@@ -283,11 +283,7 @@ const destinationAliases: Record<string, number> = {
   "old site station": 90, "old site shuttle": 90, "science station": 91, "science shuttle": 91, "valco station": 92,
 };
 
-const shuttleRoutes = [
-  { name: "Campus Connector", stops: [90, 91, 92], period: "Academic days · operating times follow posted campus notices", interval: 15 },
-  { name: "Old Site–Science Link", stops: [90, 91], period: "Academic days · peak teaching periods", interval: 12 },
-  { name: "Science–Valco Link", stops: [91, 92], period: "Academic days · peak teaching periods", interval: 15 },
-];
+const officialShuttleNotice = "https://news.ucc.edu.gh/ucc-gets-new-gatehouse-shuttle-terminal-002G";
 
 function normalizeDestination(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -930,15 +926,13 @@ export default function Home() {
         if (matchedPlace && matchedPlace.category !== "Transport") {
           const stops = places.filter((place) => place.category === "Transport");
           const bestStop = stops.map((stop) => ({ stop, distance: distanceMeters(stop, matchedPlace) })).sort((a, b) => a.distance - b.distance)[0];
-          const bestRoute = shuttleRoutes.find((item) => item.stops.includes(bestStop.stop.id)) ?? shuttleRoutes[0];
-          const eta = Math.max(2, bestRoute.interval - (new Date().getMinutes() % bestRoute.interval));
           setSelected(bestStop.stop);
           setLastReferencedPlace(matchedPlace);
           responsePlace = bestStop.stop;
-          answer = `For ${matchedPlace.name}, use ${bestStop.stop.name} on the ${bestRoute.name}. The stop is about ${Math.round(bestStop.distance)} m from the destination. Planning estimate: the next shuttle is in roughly ${eta} minutes. ${bestRoute.period}. This is not live vehicle tracking, so check notices at the stop.`;
+          answer = `The closest mapped shuttle stop to ${matchedPlace.name} is ${bestStop.stop.name}, about ${Math.round(bestStop.distance)} m from the destination. Campus Connect does not have a verified live timetable or vehicle feed, so confirm the route, fare, destination, accessibility, and departure time with the driver or posted notice before boarding.`;
         } else {
-          const estimates = shuttleRoutes.map((item) => `${item.name}: about ${Math.max(2, item.interval - (new Date().getMinutes() % item.interval))} min`).join("; ");
-          answer = `UCC shuttles connect Old Site, Science, and Valco. Current planning estimates are ${estimates}. These are frequency-based estimates, not live bus positions. Open the Shuttle assistant for stops, routes, and operating information.`;
+          const mappedStops = places.filter((place) => place.category === "Transport").map((place) => place.name).join(", ");
+          answer = `Mapped UCC shuttle locations are ${mappedStops}. Campus Connect does not have a verified live timetable or vehicle feed and cannot predict the next shuttle. Confirm the route, fare, destination, accessibility, and departure time at the stop before boarding.`;
         }
       } else if (wantsDuration && lastReferencedPlace) {
         if (route?.destination.id === lastReferencedPlace.id) {
@@ -1290,15 +1284,11 @@ export default function Home() {
             <div className="timetable-list">{timetable.map((entry) => <article key={entry.id}><time><b>{entry.startTime}</b><small>{dayNames[entry.dayOfWeek].slice(0, 3)}</small></time><div><b>{entry.courseCode} · {entry.title}</b><span>{entry.venue} · until {entry.endTime}</span></div><button onClick={() => deleteTimetableEntry(entry.id)} aria-label={`Remove ${entry.courseCode}`}>×</button></article>)}{!timetable.length && <div className="empty">No classes yet. Add one above or import a CSV timetable.</div>}</div>
           </>}
           {panel === "shuttle" && <>
-            <div className="modal-icon ai">↔</div><h2>Campus shuttle assistant</h2><p className="modal-subtitle">Mapped UCC stops, route guidance, and frequency-based arrival estimates.</p>
+            <div className="modal-icon ai">↔</div><h2>Campus shuttle assistant</h2><p className="modal-subtitle">Mapped UCC stops and nearest-stop guidance. Live departures are not available.</p>
             <label>Where are you going?<select value={shuttleDestinationId} onChange={(event) => setShuttleDestinationId(Number(event.target.value))}>{places.filter((place) => place.category !== "Transport" && place.category !== "Landmark").map((place) => <option value={place.id} key={place.id}>{place.name}</option>)}</select></label>
             <div className="best-stop"><span>BEST STOP</span><b>{recommendedShuttleStop.stop.name}</b><small>About {Math.round(recommendedShuttleStop.distance)} m from {shuttleDestination.name}</small><button onClick={() => { setSelected(recommendedShuttleStop.stop); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Show stop on map →</button></div>
-            <div className="shuttle-routes">{shuttleRoutes.map((item) => {
-              const stopNames = item.stops.map((id) => places.find((place) => place.id === id)?.name.replace(" Shuttle Station", "")).join(" → ");
-              const estimate = Math.max(2, item.interval - (new Date().getMinutes() % item.interval));
-              return <article key={item.name}><div><b>{item.name}</b><span>{stopNames}</span><small>{item.period}</small></div><em><b>~{estimate} min</b><span>estimated</span></em></article>;
-            })}</div>
-            <p className="shuttle-disclaimer">Arrival times are planning estimates based on route frequency, not live vehicle tracking. Confirm current operations at posted station notices.</p>
+            <div className="shuttle-routes">{places.filter((place) => place.category === "Transport").map((stop) => <article key={stop.id}><div><b>{stop.name}</b><span>{stop.distance}</span><small>{stop.hours}</small></div><button onClick={() => { setSelected(stop); setPanel(null); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>Show on map →</button></article>)}</div>
+            <p className="shuttle-disclaimer">No verified live timetable or vehicle feed is connected. Confirm the route, fare, destination, accessibility, and departure time with the driver or notices at the stop. <a href={officialShuttleNotice} target="_blank" rel="noreferrer">Read UCC’s shuttle-terminal notice ↗</a></p>
           </>}
           {panel === "emergency" && <>
             <div className="modal-icon emergency">+</div><h2>Emergency help</h2><p className="modal-subtitle">If anyone is in immediate danger, call 112 or the appropriate dedicated service now.</p>
