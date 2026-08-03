@@ -15,13 +15,15 @@ class AuthController extends Controller {
     public function showLogin() { return $this->form('login'); }
     public function showRegister() { return $this->form('register'); }
     public function login(Request $r) {
-        $data=$r->validate(['email'=>'required|email','password'=>'required']);
+        if (is_string($r->input('email'))) $r->merge(['email'=>strtolower(trim($r->input('email')))]);
+        $data=$r->validate(['email'=>'required|string|email|max:255','password'=>'required|string|max:72']);
         if (!Auth::attempt($data, true)) return back()->withErrors(['email'=>'The credentials do not match our records.'])->onlyInput('email');
         $r->session()->regenerate(); return $r->user()->hasVerifiedEmail() ? redirect('/') : redirect()->route('verification.notice');
     }
     public function register(Request $r) {
-        $data=$r->validate(['name'=>'required|min:2|max:255','email'=>'required|email|unique:users','password'=>'required|min:8|confirmed']);
-        $user=User::create(['name'=>$data['name'],'email'=>strtolower($data['email']),'password'=>Hash::make($data['password'])]);
+        if (is_string($r->input('email'))) $r->merge(['email'=>strtolower(trim($r->input('email')))]);
+        $data=$r->validate(['name'=>'required|string|min:2|max:255','email'=>'required|string|email|max:255|unique:users','password'=>'required|string|min:8|max:72|confirmed']);
+        $user=User::create(['name'=>$data['name'],'email'=>$data['email'],'password'=>Hash::make($data['password'])]);
         Auth::login($user); $r->session()->regenerate(); $user->sendEmailVerificationNotification(); return redirect()->route('verification.notice');
     }
     public function logout(Request $r) {

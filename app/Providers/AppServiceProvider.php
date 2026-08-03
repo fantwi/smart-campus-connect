@@ -26,7 +26,8 @@ class AppServiceProvider extends ServiceProvider
         $this->ensureProductionConfigurationIsSecure();
 
         RateLimiter::for('login', function (Request $request) {
-            $email = Str::lower((string) $request->input('email'));
+            $input = $request->input('email');
+            $email = is_string($input) ? Str::lower(trim($input)) : 'invalid-email';
 
             return Limit::perMinute(5)->by(Str::transliterate($email).'|'.$request->ip());
         });

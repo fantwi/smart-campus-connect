@@ -10,6 +10,32 @@ class InputValidationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_registration_rejects_array_fields_and_oversized_passwords(): void
+    {
+        $this->post('/register', [
+            'name' => ['not', 'a string'],
+            'email' => ['not', 'an email'],
+            'password' => array_fill(0, 8, 'value'),
+            'password_confirmation' => array_fill(0, 8, 'value'),
+        ])->assertSessionHasErrors(['name', 'email', 'password']);
+
+        $password = str_repeat('a', 73);
+        $this->post('/register', [
+            'name' => 'Campus Student',
+            'email' => 'student@example.com',
+            'password' => $password,
+            'password_confirmation' => $password,
+        ])->assertSessionHasErrors(['password']);
+    }
+
+    public function test_login_rejects_non_string_credentials(): void
+    {
+        $this->post('/login', [
+            'email' => ['target@example.com'],
+            'password' => ['incorrect-password'],
+        ])->assertSessionHasErrors(['email', 'password']);
+    }
+
     public function test_issue_coordinates_must_be_within_geographic_bounds(): void
     {
         $user = User::factory()->create(['id' => 2001]);
