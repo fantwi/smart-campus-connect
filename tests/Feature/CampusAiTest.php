@@ -27,10 +27,10 @@ class CampusAiTest extends TestCase
             'answer' => 'The library closes at 10 PM.',
             'generatedByModel' => true,
             'model' => 'gpt-5.6-sol',
+            'provider' => 'openai',
         ]);
 
-        Http::assertSent(fn (Request $request) =>
-            $request->url() === 'https://api.openai.com/v1/responses'
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.openai.com/v1/responses'
             && $request['store'] === false
             && $request['reasoning']['effort'] === 'low'
             && str_contains($request['input'], 'Sam Jonah Library is open until 10 PM.')
@@ -55,8 +55,7 @@ class CampusAiTest extends TestCase
             ->assertJsonPath('generatedByModel', true)
             ->assertJsonPath('answer', 'Sam Jonah Nwoma Korabea no to pon anwummere dɔn du.');
 
-        Http::assertSent(fn (Request $request) =>
-            str_contains($request['instructions'], 'Reply directly in Twi')
+        Http::assertSent(fn (Request $request) => str_contains($request['instructions'], 'Reply directly in Twi')
             && str_contains($request['input'], 'Sam Jonah Library closes at 10 PM.')
         );
     }
@@ -75,6 +74,40 @@ class CampusAiTest extends TestCase
             'generatedByModel' => false,
             'model' => null,
         ]);
+    }
+
+    public function test_it_uses_xai_when_openai_is_unavailable(): void
+    {
+        config()->set('services.openai.key', 'openai-test-key');
+        config()->set('services.xai.key', 'xai-test-key');
+        config()->set('services.xai.model', 'grok-4.5');
+        Http::fake([
+            'https://api.openai.com/v1/responses' => Http::response(['error' => ['message' => 'unavailable']], 503),
+            'https://api.x.ai/v1/responses' => Http::response([
+                'output' => [[
+                    'type' => 'message',
+                    'content' => [['type' => 'output_text', 'text' => 'The University Hospital is on South Campus.']],
+                ]],
+            ]),
+        ]);
+
+        $this->postJson('/api/campus-ai', [
+            'question' => 'Where is the hospital?',
+            'groundedAnswer' => 'The University Hospital is on South Campus.',
+            'language' => 'en',
+        ])->assertOk()->assertJson([
+            'answer' => 'The University Hospital is on South Campus.',
+            'generatedByModel' => true,
+            'model' => 'grok-4.5',
+            'provider' => 'xai',
+        ]);
+
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.x.ai/v1/responses'
+            && $request['model'] === 'grok-4.5'
+            && $request['store'] === false
+            && ! isset($request['reasoning'])
+            && str_contains($request['instructions'], 'Answer only from the verified campus answer')
+        );
     }
 
     public function test_it_validates_and_rate_limits_ai_requests(): void

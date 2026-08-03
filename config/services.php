@@ -46,6 +46,12 @@ return [
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
     ],
 
+    'xai' => [
+        'key' => env('XAI_API_KEY'),
+        'model' => env('XAI_MODEL', 'grok-4.5'),
+        'base_url' => env('XAI_BASE_URL', 'https://api.x.ai/v1'),
+    ],
+
     // Sign in with ChatGPT is only shown when the hosting environment supplies
     // a supported sign-in URL. Local email/password accounts never depend on it.
     'chatgpt' => [
