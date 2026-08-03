@@ -21,11 +21,17 @@ class IssuePhotoSecurityTest extends TestCase
         $reporter = User::factory()->create(['id' => 999]);
         $otherUser = User::factory()->create(['id' => 1000]);
 
+        $source = UploadedFile::fake()->image('source.jpg', 640, 480);
+        $photo = UploadedFile::fake()->createWithContent(
+            'evidence.jpg',
+            file_get_contents($source->getRealPath()).'GPS-METADATA-MARKER',
+        );
+
         $response = $this->actingAs($reporter)->post('/api/issues', [
             'category' => 'Damage',
             'description' => 'A damaged fixture needs attention.',
             'locationText' => 'Science Block',
-            'photo' => UploadedFile::fake()->image('evidence.jpg'),
+            'photo' => $photo,
         ]);
 
         $response->assertOk();
@@ -33,6 +39,8 @@ class IssuePhotoSecurityTest extends TestCase
 
         Storage::disk('local')->assertExists($report->photo_key);
         Storage::disk('public')->assertMissing($report->photo_key);
+        $this->assertStringNotContainsString('GPS-METADATA-MARKER', Storage::disk('local')->get($report->photo_key));
+        $this->assertSame('jpg', pathinfo($report->photo_key, PATHINFO_EXTENSION));
 
         $this->actingAs($otherUser)->get(route('issues.photo', $report))->assertForbidden();
 
