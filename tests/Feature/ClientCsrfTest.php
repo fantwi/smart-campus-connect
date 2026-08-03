@@ -16,6 +16,6 @@ class ClientCsrfTest extends TestCase
 
         $this->assertIsString($source);
         $this->assertStringContainsString('"X-CSRF-TOKEN": csrfToken', $source);
-        $this->assertSame(6, substr_count($source, 'headers: csrfHeaders') + substr_count($source, 'headers: { ...csrfHeaders'));
+        $this->assertSame(7, substr_count($source, 'headers: csrfHeaders') + substr_count($source, 'headers: { ...csrfHeaders'));
     }
 }

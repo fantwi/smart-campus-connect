@@ -59,6 +59,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('feedback', fn (Request $request) =>
             Limit::perMinute(20)->by((string) ($request->user()?->id ?? $request->ip()))
         );
+
+        RateLimiter::for('campus-ai', fn (Request $request) =>
+            Limit::perMinute(12)->by((string) ($request->user()?->id ?? $request->ip()))
+        );
     }
 
     private function ensureProductionConfigurationIsSecure(): void

@@ -40,6 +40,12 @@ return [
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
     ],
 
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-5.6-sol'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+    ],
+
     // Sign in with ChatGPT is only shown when the hosting environment supplies
     // a supported sign-in URL. Local email/password accounts never depend on it.
     'chatgpt' => [

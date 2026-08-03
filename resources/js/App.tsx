@@ -45,6 +45,8 @@ type ChatMessage = {
   linkLabel?: string;
   placeId?: number;
   updates?: CampusUpdate[];
+  generatedByModel?: boolean;
+  model?: string | null;
 };
 
 type CampusUpdate = {
@@ -850,13 +852,32 @@ export default function Home() {
     }
   }
 
+  async function generateCampusAiAnswer(question: string, groundedAnswer: string) {
+    try {
+      const response = await fetch("/api/campus-ai", {
+        method: "POST",
+        headers: { ...csrfHeaders, "content-type": "application/json" },
+        body: JSON.stringify({ question, groundedAnswer, language }),
+      });
+      if (!response.ok) return { answer: groundedAnswer, generatedByModel: false, model: null };
+      const data = await response.json();
+      return {
+        answer: typeof data.answer === "string" && data.answer.trim() ? data.answer : groundedAnswer,
+        generatedByModel: data.generatedByModel === true,
+        model: typeof data.model === "string" ? data.model : null,
+      };
+    } catch {
+      return { answer: groundedAnswer, generatedByModel: false, model: null };
+    }
+  }
+
   function sendMessage(prompt?: string) {
     const q = (prompt ?? message).trim();
     if (!q) return;
     setChat((current) => [...current, { from: "user", text: q }]);
     updatePreferences({ recentQuestion: q });
     setMessage("");
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
       const lower = q.toLowerCase();
       const matchedPlace = findDestination(q);
       const wantsDirections = /\b(direction|directions|route|walk|walking|navigate|get to|how do i get)\b/.test(lower);
@@ -1008,7 +1029,8 @@ export default function Home() {
           ? `Your next class is ${nextClass.entry.courseCode}, ${nextClass.entry.title}, at ${nextClass.entry.venue} on ${dayNames[nextClass.entry.dayOfWeek]} at ${nextClass.entry.startTime}. Ask for directions to ${nextClass.entry.venue} when you are ready to leave.`
           : signedIn ? "Your timetable is empty. Open My timetable to add a class or import a CSV file." : "Sign in to create a personal timetable with reminders and route suggestions.";
       }
-      setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: lc.answerLead ? `${lc.answerLead}\n${answer}` : answer, question: q, placeId: responsePlace?.id, updates: responseUpdates }]);
+      const modelResult = await generateCampusAiAnswer(q, answer);
+      setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: lc.answerLead ? `${lc.answerLead}\n${modelResult.answer}` : modelResult.answer, question: q, placeId: responsePlace?.id, updates: responseUpdates, generatedByModel: modelResult.generatedByModel, model: modelResult.model }]);
     }, 450);
   }
 
@@ -1040,7 +1062,7 @@ export default function Home() {
             const cardPlace = item.placeId ? places.find((place) => place.id === item.placeId) : null;
             const cardMap = cardPlace ? `https://www.openstreetmap.org/export/embed.html?bbox=${cardPlace.lon - 0.002}%2C${cardPlace.lat - 0.0017}%2C${cardPlace.lon + 0.002}%2C${cardPlace.lat + 0.0017}&layer=mapnik` : "";
             return <div key={index} className={`chat-message ${item.from}`}>
-              <div className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}</div>
+              <div className={`bubble ${item.from}`}>{item.text}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{item.linkLabel}</a>}{item.from === "ai" && item.id && <small className="answer-source">{item.generatedByModel ? `AI-assisted · ${item.model}` : "Verified campus fallback"}</small>}</div>
               {item.updates && <div className="chat-update-cards">{item.updates.map((update) => <a key={update.id} href={update.url} target="_blank" rel="noreferrer">
                 <span>{update.category}</span><b>{update.title}</b>
                 <small>{new Date(update.startDate).toLocaleDateString("en-GH", { day: "numeric", month: "short", year: "numeric" })}{update.endDate !== update.startDate ? ` – ${new Date(update.endDate).toLocaleDateString("en-GH", { day: "numeric", month: "short", year: "numeric" })}` : ""}</small>

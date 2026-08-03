@@ -1,5 +1,5 @@
 <?php
-use App\Http\Controllers\{AccountController,AuthController,CampusUpdateController,FeedbackController,IssueController,OAuthController,PreferenceController,TimetableController};
+use App\Http\Controllers\{AccountController,AuthController,CampusAiController,CampusUpdateController,FeedbackController,IssueController,OAuthController,PreferenceController,TimetableController};
 use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\Request;
@@ -25,4 +25,5 @@ Route::prefix('api')->group(function(){
  Route::post('/issues',[IssueController::class,'store'])->middleware(['auth','verified','throttle:issue-submissions']); Route::post('/feedback',[FeedbackController::class,'store'])->middleware(['auth','verified','throttle:feedback']);
  Route::get('/issues/{report}/photo',[IssueController::class,'photo'])->middleware(['auth','verified'])->name('issues.photo');
  Route::get('/campus-updates',CampusUpdateController::class);
+ Route::post('/campus-ai',CampusAiController::class)->middleware('throttle:campus-ai');
 });
