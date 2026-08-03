@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? "";
+const csrfHeaders = {
+  "X-CSRF-TOKEN": csrfToken,
+  "X-Requested-With": "XMLHttpRequest",
+  Accept: "application/json",
+};
 
 type Place = {
   id: number;
@@ -464,7 +469,7 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const response = await fetch("/api/account", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...csrfHeaders, "content-type": "application/json" },
       body: JSON.stringify({
         fullName: form.get("fullName"),
         studentId: form.get("studentId"),
@@ -486,7 +491,7 @@ export default function Home() {
     setTimetableError("");
     const response = await fetch("/api/timetable", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...csrfHeaders, "content-type": "application/json" },
       body: JSON.stringify({ entries }),
     });
     const data = await response.json();
@@ -504,7 +509,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/preferences", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { ...csrfHeaders, "content-type": "application/json" },
         body: JSON.stringify(patch),
       });
       if (response.ok) {
@@ -543,7 +548,7 @@ export default function Home() {
   }
 
   async function deleteTimetableEntry(id: string) {
-    const response = await fetch(`/api/timetable?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const response = await fetch(`/api/timetable?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: csrfHeaders });
     const data = await response.json();
     if (response.ok) {
       setTimetable(data.entries ?? []);
@@ -791,7 +796,7 @@ export default function Home() {
     if (issueDraft.longitude != null) form.set("longitude", String(issueDraft.longitude));
     if (issueDraft.photo) form.set("photo", issueDraft.photo);
     try {
-      const response = await fetch("/api/issues", { method: "POST", body: form });
+      const response = await fetch("/api/issues", { method: "POST", headers: csrfHeaders, body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Report could not be submitted.");
       setChat((current) => [...current, { from: "ai", text: `Report ${data.id.slice(0, 8).toUpperCase()} was submitted successfully${data.hasPhoto ? " with your photo" : ""}. Campus support can now review it.` }]);
@@ -831,7 +836,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/feedback", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { ...csrfHeaders, "content-type": "application/json" },
         body: JSON.stringify({ messageId: item.id, rating, question: item.question, answer: item.text, correction: rating === "incorrect" ? correctionText : undefined, placeId: item.placeId }),
       });
       const data = await response.json();
