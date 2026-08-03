@@ -34,7 +34,7 @@ Email/password accounts are built into the app and require no external identity 
 http://localhost:8000/auth/google/callback
 ```
 
-`CHATGPT_SIGN_IN_URL` is intentionally blank by default. Set it only when deploying in an environment that supplies a supported Sign in with ChatGPT flow. If these optional values are blank, their buttons are not shown.
+`CHATGPT_SIGN_IN_URL` is intentionally blank by default. Set it only when deploying in an environment that supplies a supported Sign in with ChatGPT flow. The URL must use HTTPS and its host must match `CHATGPT_SIGN_IN_ALLOWED_HOSTS`; subdomains of an allowed host are accepted. If these optional values are blank or invalid, their buttons are not shown.
 
 For local development with hot reload, use `npm run dev` alongside `php artisan serve`.
 

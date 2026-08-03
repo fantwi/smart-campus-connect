@@ -9,8 +9,17 @@ class AuthController extends Controller {
         return response()->view('auth', [
             'mode' => $mode,
             'googleEnabled' => filled(config('services.google.client_id')) && filled(config('services.google.client_secret')),
-            'chatGptSignInUrl' => config('services.chatgpt.sign_in_url'),
+            'chatGptSignInUrl' => $this->safeChatGptSignInUrl(),
         ]);
+    }
+    private function safeChatGptSignInUrl(): ?string {
+        $url=config('services.chatgpt.sign_in_url');
+        if (!is_string($url) || !filter_var($url,FILTER_VALIDATE_URL)) return null;
+        $parts=parse_url($url); $host=strtolower((string)($parts['host']??''));
+        if (($parts['scheme']??'')!=='https' || $host==='' || isset($parts['user']) || isset($parts['pass'])) return null;
+        $allowed=(array)config('services.chatgpt.allowed_hosts',[]);
+        $trusted=collect($allowed)->contains(fn($candidate)=>$host===$candidate || str_ends_with($host,'.'.$candidate));
+        return $trusted?$url:null;
     }
     public function showLogin() { return $this->form('login'); }
     public function showRegister() { return $this->form('register'); }

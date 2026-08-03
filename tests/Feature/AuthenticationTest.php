@@ -53,6 +53,22 @@ class AuthenticationTest extends TestCase
         $this->get('/auth/google')->assertNotFound();
     }
 
+    public function test_chatgpt_sign_in_only_accepts_https_urls_on_allowed_hosts(): void
+    {
+        config()->set('services.chatgpt.allowed_hosts', ['chatgpt.com', 'openai.com']);
+
+        foreach (['javascript:alert(1)', 'http://chatgpt.com/login', 'https://chatgpt.com@evil.example/login', 'https://openai.com.evil.example/login'] as $unsafeUrl) {
+            config()->set('services.chatgpt.sign_in_url', $unsafeUrl);
+            $this->get('/login')->assertOk()->assertDontSee($unsafeUrl, false)->assertDontSee('Continue with ChatGPT');
+        }
+
+        config()->set('services.chatgpt.sign_in_url', 'https://auth.openai.com/sign-in');
+        $this->get('/login')
+            ->assertOk()
+            ->assertSee('Continue with ChatGPT')
+            ->assertSee('https://auth.openai.com/sign-in', false);
+    }
+
     public function test_logout_requires_a_post_request_and_ends_the_session(): void
     {
         $user = User::factory()->create();

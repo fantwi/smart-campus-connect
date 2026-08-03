@@ -44,6 +44,10 @@ return [
     // a supported sign-in URL. Local email/password accounts never depend on it.
     'chatgpt' => [
         'sign_in_url' => env('CHATGPT_SIGN_IN_URL'),
+        'allowed_hosts' => array_values(array_filter(array_map(
+            fn (string $host) => strtolower(trim($host)),
+            explode(',', (string) env('CHATGPT_SIGN_IN_ALLOWED_HOSTS', 'chatgpt.com,openai.com')),
+        ))),
     ],
 
 ];
