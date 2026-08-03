@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { classifyAssistantIntent, createCsrfHeaders, createRateableAiMessage, createWalkingRouteFailureMessage, displayLocalizedAnswer, filterCampusUpdates } from "./campus-ai.mjs";
 
 const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? "";
-const csrfHeaders = {
-  "X-CSRF-TOKEN": csrfToken,
-  "X-Requested-With": "XMLHttpRequest",
-  Accept: "application/json",
-};
+const csrfHeaders = createCsrfHeaders(csrfToken);
 
 type Place = {
   id: number;
@@ -66,10 +63,6 @@ function campusDate(value: string, options: Intl.DateTimeFormatOptions = {}) {
 
 function dateKey(value: Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
-}
-
-function rateableAiMessage(text: string, question: string, extra: Partial<ChatMessage> = {}): ChatMessage {
-  return { id: crypto.randomUUID(), from: "ai", text, question, ...extra };
 }
 
 type RoutePreview = {
@@ -702,17 +695,13 @@ export default function Home() {
         landmarks: landmarkCandidates,
         start: { lat: startLat, lon: startLon },
       });
-      setChat((current) => [...current, rateableAiMessage(
+      setChat((current) => [...current, createRateableAiMessage(
         `Your walking route to ${destination.name} is ready: ${(result.distance / 1000).toFixed(1)} km, about ${Math.max(1, Math.round(result.duration / 60))} minutes. I’ve opened the interactive preview with landmarks and step-by-step guidance.`,
         `Directions to ${destination.name}`,
         { url: fallbackUrl, linkLabel: "Open route in OpenStreetMap →", placeId: destination.id },
       )]);
     } catch {
-      setChat((current) => [...current, rateableAiMessage(
-        `I found your location, but the in-app walking route could not be loaded. You can still open directions to ${destination.name} in OpenStreetMap.`,
-        `Directions to ${destination.name}`,
-        { url: fallbackUrl, linkLabel: `Open directions to ${destination.name} →` },
-      )]);
+      setChat((current) => [...current, createWalkingRouteFailureMessage(destination, fallbackUrl)]);
     } finally {
       setRouteLoading(false);
     }
@@ -767,13 +756,13 @@ export default function Home() {
       return (a.distance + accessibilityA) - (b.distance + accessibilityB);
     }).slice(0, 3);
     if (!candidates.length) {
-      setChat((current) => [...current, rateableAiMessage(`I could not find a mapped ${kind} near ${originLabel}.`, `Find the closest ${kind} to ${originLabel}`)]);
+      setChat((current) => [...current, createRateableAiMessage(`I could not find a mapped ${kind} near ${originLabel}.`, `Find the closest ${kind} to ${originLabel}`)]);
       return;
     }
     const nearest = candidates[0].place;
     setSelected(nearest);
     setLastReferencedPlace(nearest);
-    setChat((current) => [...current, rateableAiMessage(
+    setChat((current) => [...current, createRateableAiMessage(
       `Closest ${kind === "food" ? "food options" : `${kind}s`} to ${originLabel}: ${candidates.map(({ place, distance }) => `${place.name} (${distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(1)} km`})`).join(", ")}. I’ve selected ${nearest.name} on the map.`,
       `Find the closest ${kind} to ${originLabel}`,
       { placeId: nearest.id },
@@ -889,12 +878,13 @@ export default function Home() {
     setMessage("");
     window.setTimeout(async () => {
       const lower = q.toLowerCase();
+      const assistantIntent = classifyAssistantIntent(q, Boolean(issueDraft));
       const matchedPlace = findDestination(q);
       const wantsDirections = /\b(direction|directions|route|walk|walking|navigate|get to|how do i get)\b/.test(lower);
       const wantsShuttle = /\b(shuttle|campus bus|bus stop|next bus)\b/.test(lower);
-      const wantsIssueReport = /\b(report|broken|faulty|leak|leaking|no water|security concern|damaged|damage|not working)\b/.test(lower);
+      const wantsIssueReport = assistantIntent === "issue_report";
       const wantsDuration = /\b(how long|how far|travel time|walking time)\b/.test(lower);
-      const wantsCampusUpdates = /\b(event|events|announcement|announcements|seminar|seminars|workshop|conference|src|deadline|deadlines|exam|exams|examination|examinations|academic calendar|registration date)\b/.test(lower);
+      const wantsCampusUpdates = assistantIntent === "campus_updates";
       const discoveryKind: "food" | "atm" | "library" | "hostel" | null =
         /\b(eat|food|restaurant|canteen|cafe)\b/.test(lower) ? "food" :
         /\b(atm|bank|cash)\b/.test(lower) ? "atm" :
@@ -906,7 +896,7 @@ export default function Home() {
       let responsePlace: Place | null = null;
       let responseUpdates: CampusUpdate[] | undefined;
 
-      if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
+      if (assistantIntent === "submit_issue") {
         submitIssue();
         return;
       } else if (wantsIssueReport) {
@@ -922,17 +912,9 @@ export default function Home() {
           answer = `I’ve started a ${category.toLowerCase()} report${matchedPlace ? ` at ${matchedPlace.name}` : ""}. Add or confirm the location below, optionally attach a photo or your live location, then submit it.`;
         }
       } else if (wantsCampusUpdates) {
-        const wantsNews = /\b(news|announcement|announcements|src)\b/.test(lower);
-        const wantsSrc = /\bsrc\b/.test(lower);
-        const candidates = campusUpdates.filter((update) => wantsNews
-          ? update.source === "UCC News" && (!wantsSrc || /\bsrc\b/i.test(`${update.title} ${update.category}`))
-          : update.source === "UCC Academic Calendar" && update.endDate >= todayKey);
-        const terms = lower.split(/\W+/).filter((term) => term.length > 3 && !["what", "when", "show", "about", "latest", "current", "coming", "event", "events", "announcement", "announcements", "deadline", "deadlines", "academic", "calendar"].includes(term));
-        const matches = candidates.filter((update) => {
-          const haystack = `${update.title} ${update.summary} ${update.category}`.toLowerCase();
-          return terms.length === 0 || terms.some((term) => haystack.includes(term) || (term.startsWith("exam") && haystack.includes("examination")));
-        });
-        responseUpdates = matches.slice(0, 4);
+        const updateResult = filterCampusUpdates(q, campusUpdates, todayKey);
+        const wantsNews = updateResult.kind === "news";
+        responseUpdates = updateResult.matches;
         answer = responseUpdates.length
           ? wantsNews
             ? `Here are ${responseUpdates.length} matching items from the official UCC News feed. Open a card for the complete university story.`
@@ -962,7 +944,7 @@ export default function Home() {
           navigator.geolocation.getCurrentPosition(({ coords }) => {
             setCurrentLocation({ lat: coords.latitude, lon: coords.longitude });
             loadWalkingRoute(coords.latitude, coords.longitude, lastReferencedPlace);
-          }, () => setChat((current) => [...current, rateableAiMessage("I need location access to calculate your walking time.", `Walking time to ${lastReferencedPlace.name}`)]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+          }, () => setChat((current) => [...current, createRateableAiMessage("I need location access to calculate your walking time.", `Walking time to ${lastReferencedPlace.name}`)]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
           return;
         }
       } else if (wantsDiscovery && discoveryKind) {
@@ -982,7 +964,7 @@ export default function Home() {
             const origin = { lat: coords.latitude, lon: coords.longitude };
             setCurrentLocation(origin);
             shareNearbyResults(discoveryKind, origin, "your current location");
-          }, () => setChat((current) => [...current, rateableAiMessage("Location access is needed for nearby discovery. You can also name a place, then ask what is closest to it.", q)]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+          }, () => setChat((current) => [...current, createRateableAiMessage("Location access is needed for nearby discovery. You can also name a place, then ask what is closest to it.", q)]), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
           return;
         }
       } else if (matchedPlace && wantsDirections) {
@@ -990,7 +972,7 @@ export default function Home() {
         setLastReferencedPlace(matchedPlace);
         updatePreferences({ visitedPlaceId: matchedPlace.id });
         if (!navigator.geolocation) {
-          setChat((current) => [...current, rateableAiMessage("This browser does not support location services. Open the destination on the Explore UCC map to choose a starting point manually.", q, { placeId: matchedPlace.id })]);
+          setChat((current) => [...current, createRateableAiMessage("This browser does not support location services. Open the destination on the Explore UCC map to choose a starting point manually.", q, { placeId: matchedPlace.id })]);
           return;
         }
         setChat((current) => [...current, { from: "ai", text: `I found ${matchedPlace.name}. Allow location access and I’ll create a walking route from where you are now.` }]);
@@ -1001,7 +983,7 @@ export default function Home() {
           },
           (error) => {
             const reason = error.code === 1 ? "Location permission was denied" : "Your current location could not be determined";
-            setChat((current) => [...current, rateableAiMessage(`${reason}. Enable location access in your browser and ask me again, or open ${matchedPlace.name} on the map.`, q, { placeId: matchedPlace.id })]);
+            setChat((current) => [...current, createRateableAiMessage(`${reason}. Enable location access in your browser and ask me again, or open ${matchedPlace.name} on the map.`, q, { placeId: matchedPlace.id })]);
           },
           { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
         );
@@ -1050,11 +1032,7 @@ export default function Home() {
       }
       const modelResult = await generateCampusAiAnswer(q, answer);
       const selectedLanguage = languageOptions.find((item) => item.code === language)?.label ?? "English";
-      const displayedAnswer = modelResult.generatedByModel
-        ? modelResult.answer
-        : language === "en"
-          ? modelResult.answer
-          : `${modelResult.answer}\n\n${selectedLanguage} translation is temporarily unavailable, so the verified English answer is shown.`;
+      const displayedAnswer = displayLocalizedAnswer(modelResult.answer, language, selectedLanguage, modelResult.generatedByModel);
       setChat((current) => [...current, { id: crypto.randomUUID(), from: "ai", text: displayedAnswer, question: q, placeId: responsePlace?.id, updates: responseUpdates, generatedByModel: modelResult.generatedByModel, model: modelResult.model }]);
     }, 450);
   }

@@ -13,9 +13,12 @@ class ClientCsrfTest extends TestCase
             ->assertSee('name="csrf-token"', false);
 
         $source = file_get_contents(resource_path('js/App.tsx'));
+        $logic = file_get_contents(resource_path('js/campus-ai.mjs'));
 
         $this->assertIsString($source);
-        $this->assertStringContainsString('"X-CSRF-TOKEN": csrfToken', $source);
+        $this->assertIsString($logic);
+        $this->assertStringContainsString('createCsrfHeaders(csrfToken)', $source);
+        $this->assertStringContainsString('"X-CSRF-TOKEN": token', $logic);
         $this->assertSame(7, substr_count($source, 'headers: csrfHeaders') + substr_count($source, 'headers: { ...csrfHeaders'));
     }
 }
