@@ -897,7 +897,22 @@ export default function Home() {
       let responsePlace: Place | null = null;
       let responseUpdates: CampusUpdate[] | undefined;
 
-      if (wantsCampusUpdates) {
+      if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
+        submitIssue();
+        return;
+      } else if (wantsIssueReport) {
+        if (!signedIn) {
+          answer = "Please sign in before submitting an issue so campus support can associate the report with your account.";
+        } else {
+          const category: IssueDraft["category"] =
+            /\b(light|lamp|dark)\b/.test(lower) ? "Lighting" :
+            /\b(water|leak|pipe|tap)\b/.test(lower) ? "Water" :
+            /\b(security|unsafe|suspicious|threat)\b/.test(lower) ? "Security" :
+            /\b(damage|broken|crack)\b/.test(lower) ? "Damage" : "Other";
+          setIssueDraft({ category, description: q, locationText: matchedPlace?.name ?? "", latitude: null, longitude: null, photo: null });
+          answer = `I’ve started a ${category.toLowerCase()} report${matchedPlace ? ` at ${matchedPlace.name}` : ""}. Add or confirm the location below, optionally attach a photo or your live location, then submit it.`;
+        }
+      } else if (wantsCampusUpdates) {
         const wantsNews = /\b(news|announcement|announcements|src)\b/.test(lower);
         const wantsSrc = /\bsrc\b/.test(lower);
         const candidates = campusUpdates.filter((update) => wantsNews
@@ -918,21 +933,6 @@ export default function Home() {
             : wantsNews
               ? "I found no matching item in the current UCC News feed. Use the Latest updates section to open the official news page."
               : "I found no matching active or upcoming item in the official UCC academic calendar.";
-      } else if (/\b(submit|send|file)\b/.test(lower) && /\b(report|issue)\b/.test(lower) && issueDraft) {
-        submitIssue();
-        return;
-      } else if (wantsIssueReport) {
-        if (!signedIn) {
-          answer = "Please sign in before submitting an issue so campus support can associate the report with your account.";
-        } else {
-          const category: IssueDraft["category"] =
-            /\b(light|lamp|dark)\b/.test(lower) ? "Lighting" :
-            /\b(water|leak|pipe|tap)\b/.test(lower) ? "Water" :
-            /\b(security|unsafe|suspicious|threat)\b/.test(lower) ? "Security" :
-            /\b(damage|broken|crack)\b/.test(lower) ? "Damage" : "Other";
-          setIssueDraft({ category, description: q, locationText: matchedPlace?.name ?? "", latitude: null, longitude: null, photo: null });
-          answer = `I’ve started a ${category.toLowerCase()} report${matchedPlace ? ` at ${matchedPlace.name}` : ""}. Add or confirm the location below, optionally attach a photo or your live location, then submit it.`;
-        }
       } else if (wantsShuttle) {
         if (matchedPlace && matchedPlace.category !== "Transport") {
           const stops = places.filter((place) => place.category === "Transport");
